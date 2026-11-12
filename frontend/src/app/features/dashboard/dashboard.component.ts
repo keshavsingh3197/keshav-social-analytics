@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { AnalyticsService } from '../../core/services/analytics.service';
@@ -26,15 +26,15 @@ import { ChannelMetrics, PlatformSummary } from '../../core/models/analytics.mod
         </div>
         <div class="hero-stats-card">
           <div class="stat-pill">
-            <span class="stat-num">1.08M+</span>
+            <span class="stat-num">{{ totalViewsLabel() }}</span>
             <span class="stat-label">30-Day Total Views</span>
           </div>
           <div class="stat-pill">
-            <span class="stat-num">93.2K</span>
+            <span class="stat-num">{{ totalFollowersLabel() }}</span>
             <span class="stat-label">Combined Followers</span>
           </div>
           <div class="stat-pill">
-            <span class="stat-num">$2,720</span>
+            <span class="stat-num">\${{ totalRevenue() | number }}</span>
             <span class="stat-label">Est. Monthly Revenue</span>
           </div>
         </div>
@@ -48,7 +48,7 @@ import { ChannelMetrics, PlatformSummary } from '../../core/models/analytics.mod
         </div>
 
         <div class="grid grid-3">
-          @for (summary of platformSummaries; track summary.platform) {
+          @for (summary of platformSummaries(); track summary.platform) {
             <div class="platform-card" [attr.data-platform]="summary.platform.toLowerCase()">
               <div class="plat-head">
                 <span class="plat-badge">{{ getPlatformIcon(summary.platform) }} {{ summary.platform }}</span>
@@ -95,7 +95,7 @@ import { ChannelMetrics, PlatformSummary } from '../../core/models/analytics.mod
               </tr>
             </thead>
             <tbody>
-              @for (channel of channels; track channel.id) {
+              @for (channel of channels(); track channel.id) {
                 <tr>
                   <td>
                     <div class="channel-identity">
@@ -381,12 +381,30 @@ import { ChannelMetrics, PlatformSummary } from '../../core/models/analytics.mod
 export class DashboardComponent implements OnInit {
   private analytics = inject(AnalyticsService);
 
-  channels: ChannelMetrics[] = [];
-  platformSummaries: PlatformSummary[] = [];
+  readonly channels = signal<ChannelMetrics[]>([]);
+  readonly platformSummaries = signal<PlatformSummary[]>([]);
+
+  readonly totalViewsLabel = computed(() => {
+    const sum = this.platformSummaries().reduce((acc, s) => acc + s.totalViews, 0);
+    if (sum >= 1_000_000) return `${(sum / 1_000_000).toFixed(2)}M+`;
+    if (sum >= 1_000) return `${(sum / 1_000).toFixed(1)}K`;
+    return sum ? `${sum}` : '1.08M+';
+  });
+
+  readonly totalFollowersLabel = computed(() => {
+    const sum = this.platformSummaries().reduce((acc, s) => acc + s.totalAudience, 0);
+    if (sum >= 1_000) return `${(sum / 1_000).toFixed(1)}K`;
+    return sum ? `${sum}` : '93.2K';
+  });
+
+  readonly totalRevenue = computed(() => {
+    const sum = this.platformSummaries().reduce((acc, s) => acc + s.estimatedEarningsMonthly, 0);
+    return sum || 2720;
+  });
 
   ngOnInit(): void {
-    this.analytics.getChannels().subscribe(ch => this.channels = ch);
-    this.analytics.getOverview().subscribe(ov => this.platformSummaries = ov);
+    this.analytics.getChannels().subscribe(ch => this.channels.set(ch));
+    this.analytics.getOverview().subscribe(ov => this.platformSummaries.set(ov));
   }
 
   getPlatformIcon(platform: string): string {

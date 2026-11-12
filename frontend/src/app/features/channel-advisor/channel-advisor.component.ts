@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AnalyticsService } from '../../core/services/analytics.service';
@@ -25,10 +25,11 @@ import { ChannelAuditResult, SocialPlatform } from '../../core/models/analytics.
           <div class="input-action-row">
             <input 
               type="text" 
-              [(ngModel)]="selectedHandle" 
+              [ngModel]="selectedHandle()" 
+              (ngModelChange)="selectedHandle.set($event)"
               placeholder="@KeshavSingh" 
               class="form-input" />
-            <select [(ngModel)]="selectedPlatform" class="form-select">
+            <select [ngModel]="selectedPlatform()" (ngModelChange)="selectedPlatform.set($event)" class="form-select">
               <option value="YouTube">YouTube</option>
               <option value="Instagram">Instagram</option>
               <option value="Facebook">Facebook</option>
@@ -38,17 +39,17 @@ import { ChannelAuditResult, SocialPlatform } from '../../core/models/analytics.
         </div>
       </div>
 
-      @if (auditResult) {
+      @if (auditResult(); as audit) {
         <!-- Audit Score Overview -->
         <div class="audit-hero-card">
           <div class="score-circle">
-            <span class="score-val">{{ auditResult.healthScoreOutOf100 }}</span>
+            <span class="score-val">{{ audit.healthScoreOutOf100 }}</span>
             <span class="score-max">/ 100</span>
           </div>
           <div class="audit-summary-text">
             <h2>Channel Algorithmic Health: Excellent</h2>
             <p>
-              Your channel <strong>{{ auditResult.channelHandle }}</strong> shows strong organic momentum. 
+              Your channel <strong>{{ audit.channelHandle }}</strong> shows strong organic momentum. 
               Implementing the priority optimizations below will significantly elevate initial 2-hour velocity 
               and improve conversion to sibling web assets.
             </p>
@@ -59,7 +60,7 @@ import { ChannelAuditResult, SocialPlatform } from '../../core/models/analytics.
         <div class="suggestions-section">
           <h2>🎯 Priority Growth Recommendations</h2>
           <div class="suggestions-grid">
-            @for (sugg of auditResult.prioritySuggestions; track sugg.id) {
+            @for (sugg of audit.prioritySuggestions; track sugg.id) {
               <div class="sugg-card">
                 <div class="sugg-header">
                   <span class="sugg-category">{{ sugg.category }}</span>
@@ -89,7 +90,7 @@ import { ChannelAuditResult, SocialPlatform } from '../../core/models/analytics.
             <h3>⏰ Optimal Upload Time Windows</h3>
             <p class="meta-sub">Based on regional subscriber activity peaks:</p>
             <ul class="time-list">
-              @for (time of auditResult.bestUploadTimes; track time) {
+              @for (time of audit.bestUploadTimes; track time) {
                 <li>
                   <span class="clock-icon">🕒</span>
                   <span>{{ time }}</span>
@@ -102,7 +103,7 @@ import { ChannelAuditResult, SocialPlatform } from '../../core/models/analytics.
             <h3>🔥 High-Demand SEO Keywords & Tags</h3>
             <p class="meta-sub">Currently trending tags to include in descriptions & titles:</p>
             <div class="tag-cloud">
-              @for (kw of auditResult.highDemandKeywords; track kw) {
+              @for (kw of audit.highDemandKeywords; track kw) {
                 <span class="kw-tag">#{{ kw }}</span>
               }
             </div>
@@ -316,16 +317,16 @@ import { ChannelAuditResult, SocialPlatform } from '../../core/models/analytics.
 export class ChannelAdvisorComponent implements OnInit {
   private analytics = inject(AnalyticsService);
 
-  selectedHandle: string = '@KeshavSingh';
-  selectedPlatform: SocialPlatform = 'YouTube';
-  auditResult: ChannelAuditResult | null = null;
+  readonly selectedHandle = signal('@KeshavSingh');
+  readonly selectedPlatform = signal<SocialPlatform>('YouTube');
+  readonly auditResult = signal<ChannelAuditResult | null>(null);
 
   ngOnInit(): void {
     this.runAudit();
   }
 
   runAudit(): void {
-    this.analytics.auditChannel(this.selectedHandle, this.selectedPlatform)
-      .subscribe(res => this.auditResult = res);
+    this.analytics.auditChannel(this.selectedHandle(), this.selectedPlatform())
+      .subscribe(res => this.auditResult.set(res));
   }
 }
