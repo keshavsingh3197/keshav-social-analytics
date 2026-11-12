@@ -1,96 +1,112 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { AnalyticsService } from '../../core/services/analytics.service';
-import { FunnelCampaign } from '../../core/models/analytics.models';
+import { EcosystemConfigService } from '../../core/services/ecosystem-config.service';
+import { AuthService } from '../../core/services/auth.service';
+import { FunnelCampaign, SiteConfig } from '../../core/models/analytics.models';
 
 @Component({
   selector: 'app-traffic-funnel',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
     <div class="funnel-page">
       <div class="header-box">
         <h1>🎯 Traffic Funnel & Link Conversion Engine</h1>
         <p>
           Convert YouTube video viewers and social traffic into website sessions, SaaS subscribers, 
-          and monetization opportunities. Generate trackable referral links for your video descriptions.
+          and monetization opportunities. Share trackable referral links directly in your descriptions.
         </p>
       </div>
 
       <!-- Quick Funnel Presets to Keshav Ecosystem -->
       <section class="preset-section">
-        <h3>🚀 Instant Keshav Ecosystem Funnels</h3>
-        <p class="section-sub">Click to generate ready-to-paste video description links:</p>
+        <h3>🚀 Keshav Ecosystem Funnels</h3>
+        <p class="section-sub">
+          @if (auth.isAdmin()) {
+            Generate or copy trackable referral links across all ecosystem apps:
+          } @else {
+            Active ecosystem destinations and tracked funnel links:
+          }
+        </p>
 
         <div class="preset-grid">
-          <div class="preset-card">
-            <div class="preset-icon">🎬</div>
-            <div class="preset-details">
-              <strong>Studio AnimStudio AI Funnel</strong>
-              <span>Target: studio.keshavsingh.in</span>
+          @for (site of promoSites(); track site.key) {
+            <div class="preset-card">
+              <div class="preset-icon">{{ site.icon || '🌐' }}</div>
+              <div class="preset-details">
+                <strong>{{ site.name }}</strong>
+                <span>Target: {{ site.url.replace('https://', '') }}</span>
+              </div>
+              @if (findCampaignByDestination(site.url); as matched) {
+                <button (click)="copyLink(matched.trackingSlug)" class="btn-preset">
+                  📋 Copy Link
+                </button>
+              } @else if (auth.isAdmin()) {
+                <button (click)="createEcosystemCampaign(site.name + ' Funnel', site.url, 'yt-' + site.key)" class="btn-preset">
+                  Generate Link
+                </button>
+              } @else {
+                <a [href]="site.url" target="_blank" rel="noopener" class="btn-preset-link">Visit →</a>
+              }
             </div>
-            <button (click)="createEcosystemCampaign('Keshav AnimStudio AI', 'https://studio.keshavsingh.in', 'yt-animstudio')" class="btn-preset">
-              Generate Link
-            </button>
-          </div>
-
-          <div class="preset-card">
-            <div class="preset-icon">🕉️</div>
-            <div class="preset-details">
-              <strong>Daily Hindu Panchang Funnel</strong>
-              <span>Target: panchang.keshavsingh.in</span>
-            </div>
-            <button (click)="createEcosystemCampaign('Daily Panchang & Rashifal', 'https://panchang.keshavsingh.in', 'yt-panchang')" class="btn-preset">
-              Generate Link
-            </button>
-          </div>
-
-          <div class="preset-card">
-            <div class="preset-icon">✍️</div>
-            <div class="preset-details">
-              <strong>Dev Content Blog Funnel</strong>
-              <span>Target: git.keshavsingh.in</span>
-            </div>
-            <button (click)="createEcosystemCampaign('Engineering Blog Articles', 'https://git.keshavsingh.in', 'yt-blog')" class="btn-preset">
-              Generate Link
-            </button>
-          </div>
+          }
         </div>
       </section>
 
-      <!-- Create Custom Campaign Modal/Bar -->
-      <section class="create-card">
-        <h3>Create New Tracked Campaign Link</h3>
-        <div class="form-row">
-          <input 
-            type="text" 
-            [ngModel]="campaignTitle()" 
-            (ngModelChange)="campaignTitle.set($event)"
-            placeholder="Campaign Title (e.g. YouTube Video #45 Link)" 
-            class="f-input" />
-          <input 
-            type="text" 
-            [ngModel]="campaignSource()" 
-            (ngModelChange)="campaignSource.set($event)"
-            placeholder="Source (e.g. YouTube Description)" 
-            class="f-input" />
-          <input 
-            type="text" 
-            [ngModel]="campaignDestination()" 
-            (ngModelChange)="campaignDestination.set($event)"
-            placeholder="Destination URL (https://...)" 
-            class="f-input" />
-          <button (click)="submitCampaign()" class="btn-create">Create Funnel</button>
-        </div>
-        @if (statusMessage(); as msg) {
-          <div class="status-toast">{{ msg }}</div>
-        }
-      </section>
+      <!-- Create Custom Campaign Bar (Admin Only) -->
+      @if (auth.isAdmin()) {
+        <section class="create-card">
+          <h3>Create New Tracked Campaign Link (Admin)</h3>
+          <div class="form-row">
+            <input 
+              type="text" 
+              [ngModel]="campaignTitle()" 
+              (ngModelChange)="campaignTitle.set($event)"
+              placeholder="Campaign Title (e.g. YouTube Video #45 Link)" 
+              class="f-input" />
+            <input 
+              type="text" 
+              [ngModel]="campaignSource()" 
+              (ngModelChange)="campaignSource.set($event)"
+              placeholder="Source (e.g. YouTube Description)" 
+              class="f-input" />
+            <input 
+              type="text" 
+              [ngModel]="campaignDestination()" 
+              (ngModelChange)="campaignDestination.set($event)"
+              placeholder="Destination URL (https://...)" 
+              class="f-input" />
+            <button (click)="submitCampaign()" class="btn-create">Create Funnel</button>
+          </div>
+          @if (statusMessage(); as msg) {
+            <div class="status-toast">{{ msg }}</div>
+          }
+        </section>
+      } @else {
+        <section class="create-card admin-lock-card">
+          <div class="lock-row">
+            <span>🔒 Funnel creation & conversion management are restricted to <strong>Admin</strong> accounts.</span>
+            @if (!auth.isAuthenticated()) {
+              <button (click)="auth.loginRedirect()" class="btn-preset">Sign in with SSO</button>
+            }
+          </div>
+          @if (statusMessage(); as msg) {
+            <div class="status-toast">{{ msg }}</div>
+          }
+        </section>
+      }
 
       <!-- Active Campaigns Table -->
       <section class="campaigns-section">
-        <h3>Active Traffic Campaigns & Conversion Metrics</h3>
+        <div class="campaigns-head">
+          <h3>Active Traffic Campaigns & Conversion Metrics</h3>
+          @if (auth.isAdmin()) {
+            <a routerLink="/admin" class="manage-link">Manage all funnels in Admin →</a>
+          }
+        </div>
         <div class="table-wrap">
           <table class="funnel-table">
             <thead>
@@ -112,7 +128,9 @@ import { FunnelCampaign } from '../../core/models/analytics.models';
                   <td><span class="source-tag">{{ camp.sourcePlatform }}</span></td>
                   <td><a [href]="camp.destinationUrl" target="_blank" rel="noopener" class="dest-link">{{ camp.destinationUrl }}</a></td>
                   <td>
-                    <code class="slug-code">https://social.keshavsingh.in/t/{{ camp.trackingSlug }}</code>
+                    <a [routerLink]="['/t', camp.trackingSlug]" class="slug-link">
+                      <code class="slug-code">{{ trackingUrl(camp.trackingSlug) }}</code>
+                    </a>
                   </td>
                   <td><strong>{{ camp.totalClicks | number }}</strong></td>
                   <td>{{ camp.conversions | number }}</td>
@@ -132,9 +150,9 @@ import { FunnelCampaign } from '../../core/models/analytics.models';
       <!-- Video Description Template Generator -->
       <section class="description-template-card">
         <h3>📝 Pre-formatted YouTube Video Description Template</h3>
-        <p class="section-sub">Copy and paste this into your video upload metadata to funnel traffic effortlessly:</p>
+        <p class="section-sub">Dynamically built from your active ecosystem URLs & funnel links:</p>
         <div class="template-box">
-          <pre>{{ videoDescriptionSnippet }}</pre>
+          <pre>{{ videoDescriptionSnippet() }}</pre>
         </div>
         <button (click)="copySnippet()" class="btn-snippet">📋 Copy Description Snippet</button>
       </section>
@@ -335,29 +353,69 @@ import { FunnelCampaign } from '../../core/models/analytics.models';
       font-size: 0.85rem;
       font-weight: 600;
     }
+    .btn-preset-link {
+      background: #e2e8f0;
+      color: #1e293b;
+      text-decoration: none;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .lock-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; font-size: 0.9rem; color: #475569; }
+    .campaigns-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .campaigns-head h3 { margin: 0; }
+    .manage-link { color: #2563eb; text-decoration: none; font-weight: 600; font-size: 0.88rem; }
+    .slug-link { text-decoration: none; }
   `]
 })
 export class TrafficFunnelComponent implements OnInit {
   private analytics = inject(AnalyticsService);
+  private ecosystem = inject(EcosystemConfigService);
+  readonly auth = inject(AuthService);
 
   readonly campaigns = signal<FunnelCampaign[]>([]);
+  readonly siteConfig = signal<SiteConfig | null>(null);
+  readonly promoSites = this.ecosystem.promoSiblingSites;
   readonly campaignTitle = signal('');
   readonly campaignSource = signal('YouTube Description');
   readonly campaignDestination = signal('https://studio.keshavsingh.in');
   readonly statusMessage = signal<string | null>(null);
 
-  videoDescriptionSnippet: string = 
-`🚀 Explore Keshav Singh Ecosystem Tools:
-✨ Create 2D/3D Animation Stories with AI: https://studio.keshavsingh.in
-🕉️ Daily Hindu Panchang, Tithi & Cultural Videos: https://panchang.keshavsingh.in
-📊 Creator Analytics & Growth Strategies: https://social.keshavsingh.in
-✍️ Read Technical Guides & Engineering Insights: https://git.keshavsingh.in
-
-🔔 Subscribe for weekly AI, engineering & cultural deep dives!
-#KeshavSingh #AIAnimation #HinduPanchang #WebDev`;
+  readonly videoDescriptionSnippet = computed(() => {
+    const cfg = this.siteConfig();
+    const header = cfg?.youtubeSnippetHeader || '🚀 Explore Keshav Singh Ecosystem Tools:';
+    const footer = cfg?.youtubeSnippetFooter || '🔔 Subscribe for weekly AI, engineering & cultural deep dives!';
+    const tags = cfg?.hashtags || '#KeshavSingh #AIAnimation #HinduPanchang #WebDev';
+    const lines = this.promoSites().map(site => {
+      const camp = this.findCampaignByDestination(site.url);
+      const targetUrl = camp ? this.trackingUrl(camp.trackingSlug) : site.url;
+      return `${site.icon || '🔗'} ${site.name}: ${targetUrl}`;
+    });
+    return `${header}\n${lines.join('\n')}\n\n${footer}\n${tags}`;
+  });
 
   ngOnInit(): void {
     this.analytics.getCampaigns().subscribe(c => this.campaigns.set(c));
+    this.analytics.getSiteConfig().subscribe(cfg => {
+      this.siteConfig.set(cfg);
+      if (cfg?.defaultDestinationBaseUrl) {
+        this.campaignDestination.set(cfg.defaultDestinationBaseUrl);
+      }
+    });
+  }
+
+  findCampaignByDestination(url: string): FunnelCampaign | undefined {
+    const clean = url.replace(/\/+$/, '').toLowerCase();
+    return this.campaigns().find(c => c.destinationUrl.replace(/\/+$/, '').toLowerCase() === clean);
+  }
+
+  trackingUrl(slug: string): string {
+    const origin = typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : 'https://social.keshavsingh.in';
+    return `${origin}/t/${slug}`;
   }
 
   submitCampaign(): void {
@@ -377,12 +435,19 @@ export class TrafficFunnelComponent implements OnInit {
       isActive: true
     };
 
-    this.analytics.createCampaign(payload).subscribe(camp => {
-      this.campaigns.update(list => [camp, ...list]);
-      this.campaignTitle.set('');
-      this.campaignSource.set('YouTube Description');
-      this.campaignDestination.set('https://studio.keshavsingh.in');
-      this.showStatus(`Created funnel campaign "${camp.title}"`);
+    this.analytics.createCampaign(payload).subscribe({
+      next: (camp) => {
+        this.campaigns.update(list => [camp, ...list]);
+        this.campaignTitle.set('');
+        this.campaignSource.set('YouTube Description');
+        this.campaignDestination.set(this.siteConfig()?.defaultDestinationBaseUrl || 'https://studio.keshavsingh.in');
+        this.showStatus(`Created funnel campaign "${camp.title}"`);
+      },
+      error: (err) => {
+        this.showStatus(err?.status === 403 || err?.status === 401
+          ? 'Admin sign-in is required to create funnels.'
+          : 'Failed to create campaign on server.');
+      }
     });
   }
 
@@ -394,13 +459,16 @@ export class TrafficFunnelComponent implements OnInit {
         sourcePlatform: 'YouTube / Instagram',
         destinationUrl: destination,
         trackingSlug: slug,
-        totalClicks: 120,
-        conversions: 18,
-        conversionRatePercentage: 15.0,
+        totalClicks: 0,
+        conversions: 0,
+        conversionRatePercentage: 0,
         isActive: true
-      }).subscribe(c => {
-        this.campaigns.update(list => [c, ...list]);
-        this.copyLink(c.trackingSlug);
+      }).subscribe({
+        next: (c) => {
+          this.campaigns.update(list => [c, ...list]);
+          this.copyLink(c.trackingSlug);
+        },
+        error: () => this.showStatus('Admin role required to register new funnel links.')
       });
     } else {
       this.copyLink(existing.trackingSlug);
@@ -408,13 +476,13 @@ export class TrafficFunnelComponent implements OnInit {
   }
 
   copyLink(slug: string): void {
-    const url = `https://social.keshavsingh.in/t/${slug}`;
+    const url = this.trackingUrl(slug);
     navigator.clipboard?.writeText(url);
     this.showStatus(`Copied tracked link: ${url}`);
   }
 
   copySnippet(): void {
-    navigator.clipboard?.writeText(this.videoDescriptionSnippet);
+    navigator.clipboard?.writeText(this.videoDescriptionSnippet());
     this.showStatus('Copied YouTube Description Template to clipboard!');
   }
 

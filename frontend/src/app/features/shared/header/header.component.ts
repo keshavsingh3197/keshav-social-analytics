@@ -20,6 +20,9 @@ import { AuthService } from '../../../core/services/auth.service';
           <a routerLink="/earnings" routerLinkActive="active-nav">💰 Earnings & RPM</a>
           <a routerLink="/advisor" routerLinkActive="active-nav">🚀 Growth Advisor</a>
           <a routerLink="/funnel" routerLinkActive="active-nav">🎯 Traffic Funnel</a>
+          @if (auth.isAdmin()) {
+            <a routerLink="/admin" routerLinkActive="active-nav" class="admin-nav">🛡️ Admin</a>
+          }
         </nav>
 
         <div class="header-actions">
@@ -95,6 +98,16 @@ import { AuthService } from '../../../core/services/auth.service';
     .nav-links a.active-nav {
       color: #2563eb;
       background: #dbeafe;
+    }
+    .nav-links a.admin-nav {
+      border: 1px solid #cbd5e1;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    .nav-links a.admin-nav.active-nav {
+      background: #0f172a;
+      color: #ffffff;
+      border-color: #0f172a;
     }
     .header-actions {
       display: flex;

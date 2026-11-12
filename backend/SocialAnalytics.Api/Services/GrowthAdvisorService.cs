@@ -4,73 +4,105 @@ namespace SocialAnalytics.Api.Services;
 
 public class GrowthAdvisorService
 {
-    public ChannelAuditResult AuditChannel(string channelHandle, SocialPlatform platform)
+    private const string SuggestionsCollection = "growth_suggestions";
+    private const string ConfigCollection = "growth_config";
+
+    private readonly HybridDataStore _store;
+    private readonly AnalyticsEngineService _analyticsService;
+
+    public GrowthAdvisorService(HybridDataStore store, AnalyticsEngineService analyticsService)
     {
-        var suggestions = new List<GrowthSuggestion>
+        _store = store;
+        _analyticsService = analyticsService;
+    }
+
+    public Task<List<GrowthSuggestion>> GetAllSuggestionsAsync() =>
+        _store.GetListAsync(SuggestionsCollection, SocialSeedData.DefaultSuggestions);
+
+    public async Task<GrowthSuggestion> UpsertSuggestionAsync(GrowthSuggestion suggestion)
+    {
+        if (string.IsNullOrWhiteSpace(suggestion.Id))
+            suggestion.Id = $"gs-{Guid.NewGuid():N}"[..10];
+
+        return await _store.UpsertItemAsync(
+            SuggestionsCollection,
+            suggestion.Id,
+            s => s.Id,
+            suggestion,
+            SocialSeedData.DefaultSuggestions);
+    }
+
+    public Task<bool> DeleteSuggestionAsync(string id) =>
+        _store.DeleteItemAsync(SuggestionsCollection, id, s => s.Id, SocialSeedData.DefaultSuggestions);
+
+    public Task<GrowthConfig> GetGrowthConfigAsync() =>
+        _store.GetSingletonAsync(ConfigCollection, "default", SocialSeedData.DefaultGrowthConfig);
+
+    public Task<GrowthConfig> SaveGrowthConfigAsync(GrowthConfig config)
+    {
+        config.Id = "default";
+        config.UpdatedAt = DateTime.UtcNow;
+        config.BestUploadTimes ??= new(StringComparer.OrdinalIgnoreCase);
+        config.HighDemandKeywords ??= [];
+        return _store.SaveSingletonAsync(ConfigCollection, "default", config);
+    }
+
+    public async Task<ChannelAuditResult> AuditChannelAsync(string channelHandle, SocialPlatform platform)
+    {
+        var allSuggestions = await GetAllSuggestionsAsync();
+        var config = await GetGrowthConfigAsync();
+        var channels = await _analyticsService.GetAllChannelsAsync(includeInactive: true);
+
+        var matchedChannel = channels.FirstOrDefault(c =>
+            c.ChannelHandle.Equals(channelHandle, StringComparison.OrdinalIgnoreCase) ||
+            c.ChannelName.Equals(channelHandle, StringComparison.OrdinalIgnoreCase))
+            ?? channels.FirstOrDefault(c => c.Platform == platform);
+
+        // Order platform-matched suggestions first, then others sorted by impact.
+        var prioritySuggestions = allSuggestions
+            .OrderByDescending(s => s.ApplicablePlatform == platform)
+            .ThenBy(s => s.Impact)
+            .Select(s => new GrowthSuggestion
+            {
+                Id = s.Id,
+                Category = s.Category,
+                Title = s.Title,
+                Description = s.Description,
+                Impact = s.Impact,
+                ActionItem = s.ActionItem,
+                EstimatedGain = s.EstimatedGain,
+                ApplicablePlatform = s.ApplicablePlatform
+            })
+            .ToList();
+
+        double healthScore = 76.0;
+        if (matchedChannel is not null)
         {
-            new()
-            {
-                Category = "Retention & Drop-off Fix",
-                Title = "Optimize the First 30 Seconds (The Hook)",
-                Description = "Viewers are dropping off in the initial 25 seconds. Introduce the payoff earlier and cut introductory animations.",
-                Impact = SuggestionImpact.High,
-                ActionItem = "Start videos with a direct question or visual demonstration within 5 seconds before giving context.",
-                EstimatedGain = "+24% Viewer Retention",
-                ApplicablePlatform = platform
-            },
-            new()
-            {
-                Category = "SEO & Title CTR",
-                Title = "Use Curiosity & High-Intent Numbers in Titles",
-                Description = "Titles containing high-contrast comparisons or specific numbers show 38% higher click-through rates.",
-                Impact = SuggestionImpact.High,
-                ActionItem = "Change vague titles to outcome-driven ones: e.g. 'How I Built 3 Projects in 24h with AI' instead of 'Project updates'.",
-                EstimatedGain = "+35% Impressions CTR",
-                ApplicablePlatform = platform
-            },
-            new()
-            {
-                Category = "Upload Timing",
-                Title = "Publish During Peak Regional Audience Activity",
-                Description = "Your audience is predominantly active between 6:30 PM - 9:00 PM IST (13:00 - 15:30 UTC) on weekdays and 10:00 AM Sundays.",
-                Impact = SuggestionImpact.Medium,
-                ActionItem = "Schedule upcoming videos 45 minutes prior to peak activity (5:45 PM IST) so the algorithm indexes the video before the wave.",
-                EstimatedGain = "+18% Initial 2-Hour Velocity",
-                ApplicablePlatform = platform
-            },
-            new()
-            {
-                Category = "Traffic Funneling",
-                Title = "Add Pinned Comment & Description CTA for Sibling Websites",
-                Description = "Funneling viewers to studio.keshavsingh.in and panchang.keshavsingh.in creates a 3.4x lifetime value per viewer.",
-                Impact = SuggestionImpact.High,
-                ActionItem = "Place your tracked link at line 1 of the description and pin the same link in the top comment.",
-                EstimatedGain = "+450 Monthly Visits / Video",
-                ApplicablePlatform = platform
-            }
-        };
+            var engScore = Math.Min(35.0, (matchedChannel.EngagementRatePercentage / Math.Max(1.0, config.TargetEngagementPercent)) * 28.0);
+            var durationScore = Math.Min(30.0, (matchedChannel.AverageViewDurationMinutes / Math.Max(0.5, config.TargetAvgWatchMinutes)) * 24.0);
+            var growthScore = Math.Min(25.0, Math.Max(0.0, matchedChannel.GrowthRateMonthlyPercentage) * 1.4);
+            var volumeScore = Math.Min(10.0, matchedChannel.VideosOrPostsCount / 15.0);
+            healthScore = Math.Round(Math.Clamp(engScore + durationScore + growthScore + volumeScore, 42.0, 99.2), 1);
+        }
+
+        var uploadTimes = new List<string>();
+        var platformKey = platform.ToString();
+        if (config.BestUploadTimes.TryGetValue(platformKey, out var primaryTime))
+            uploadTimes.Add($"{platformKey} Peak: {primaryTime}");
+
+        foreach (var kv in config.BestUploadTimes)
+        {
+            if (!kv.Key.Equals(platformKey, StringComparison.OrdinalIgnoreCase))
+                uploadTimes.Add($"{kv.Key}: {kv.Value}");
+        }
 
         return new ChannelAuditResult
         {
-            ChannelHandle = channelHandle,
-            HealthScoreOutOf100 = 84.5,
-            PrioritySuggestions = suggestions,
-            BestUploadTimes = new List<string>
-            {
-                "Tuesday: 6:30 PM - 8:30 PM IST",
-                "Thursday: 7:00 PM - 9:00 PM IST",
-                "Saturday: 11:00 AM - 1:00 PM IST",
-                "Sunday: 10:00 AM - 12:30 PM IST"
-            },
-            HighDemandKeywords = new List<string>
-            {
-                "AI animation tools",
-                "Hindu panchang today",
-                "Daily rashifal hindi",
-                "Creator monetization tips",
-                "Full stack .NET Angular",
-                "YouTube earnings CPM"
-            }
+            ChannelHandle = matchedChannel?.ChannelHandle ?? channelHandle,
+            HealthScoreOutOf100 = healthScore,
+            PrioritySuggestions = prioritySuggestions,
+            BestUploadTimes = uploadTimes,
+            HighDemandKeywords = config.HighDemandKeywords
         };
     }
 }

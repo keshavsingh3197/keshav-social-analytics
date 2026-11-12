@@ -16,9 +16,18 @@ public class RecommendationsController : ControllerBase
     }
 
     [HttpGet("audit")]
-    public ActionResult<ChannelAuditResult> Audit([FromQuery] string handle = "@KeshavSingh", [FromQuery] SocialPlatform platform = SocialPlatform.YouTube)
+    public async Task<ActionResult<ChannelAuditResult>> Audit(
+        [FromQuery] string handle = "@KeshavSingh",
+        [FromQuery] SocialPlatform platform = SocialPlatform.YouTube)
     {
-        var result = _advisorService.AuditChannel(handle, platform);
+        var result = await _advisorService.AuditChannelAsync(handle, platform);
         return Ok(result);
+    }
+
+    [HttpGet("config")]
+    public async Task<ActionResult<GrowthConfig>> GetConfig()
+    {
+        var config = await _advisorService.GetGrowthConfigAsync();
+        return Ok(config);
     }
 }

@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { EcosystemConfigService } from '../../../core/services/ecosystem-config.service';
 
 @Component({
   selector: 'app-ecosystem-bar',
@@ -10,13 +11,17 @@ import { CommonModule } from '@angular/common';
       <div class="ecosystem-container">
         <span class="eco-label">Keshav Ecosystem:</span>
         <div class="eco-links">
-          <a href="https://studio.keshavsingh.in" target="_blank" rel="noopener" class="eco-link">🎬 Studio AI</a>
-          <a href="https://social.keshavsingh.in" class="eco-link active">📊 Social Analytics</a>
-          <a href="https://panchang.keshavsingh.in" target="_blank" rel="noopener" class="eco-link">🕉️ Hindu Panchang</a>
-          <a href="https://ghar.keshavsingh.in" target="_blank" rel="noopener" class="eco-link">🏠 Ghar Ledger</a>
-          <a href="https://pratiyogita.keshavsingh.in" target="_blank" rel="noopener" class="eco-link">🏆 Pratiyogita</a>
-          <a href="https://git.keshavsingh.in" target="_blank" rel="noopener" class="eco-link">✍️ Content Blog</a>
-          <a href="https://admin.keshavsingh.in" target="_blank" rel="noopener" class="eco-link admin-pill">🛡️ Admin & SSO</a>
+          @for (site of sites(); track site.key) {
+            <a [href]="site.url"
+               [attr.target]="site.key === 'social' ? null : '_blank'"
+               [attr.rel]="site.key === 'social' ? null : 'noopener'"
+               class="eco-link"
+               [class.active]="site.key === 'social'"
+               [class.admin-pill]="site.key === 'admin'">
+              <span>{{ site.icon || '🌐' }}</span>
+              <span>{{ site.name }}</span>
+            </a>
+          }
         </div>
       </div>
     </nav>
@@ -79,4 +84,7 @@ import { CommonModule } from '@angular/common';
     }
   `]
 })
-export class EcosystemBarComponent {}
+export class EcosystemBarComponent {
+  private ecosystem = inject(EcosystemConfigService);
+  readonly sites = this.ecosystem.ecosystemBarSites;
+}

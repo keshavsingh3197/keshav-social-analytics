@@ -23,6 +23,10 @@ public class ChannelMetrics
     public double AverageViewDurationMinutes { get; set; }
     public int VideosOrPostsCount { get; set; }
     public double GrowthRateMonthlyPercentage { get; set; }
+    public double RpmUsd { get; set; } = 3.5;
+    public double EstimatedMonthlyRevenue { get; set; }
+    public string ChannelUrl { get; set; } = string.Empty;
+    public bool IsActive { get; set; } = true;
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
 }
 

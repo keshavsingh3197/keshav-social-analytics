@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -12,7 +13,10 @@ if (!string.IsNullOrWhiteSpace(port))
     builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 }
 
-// Services
+// Persistence + Dynamic Domain Services
+builder.Services.AddSingleton<HybridDataStore>();
+builder.Services.AddSingleton<SocialConfigService>();
+builder.Services.AddSingleton<FunnelService>();
 builder.Services.AddSingleton<AnalyticsEngineService>();
 builder.Services.AddSingleton<RevenueCalculatorService>();
 builder.Services.AddSingleton<GrowthAdvisorService>();
@@ -24,8 +28,13 @@ builder.Services.AddControllers()
 // Native .NET OpenAPI
 builder.Services.AddOpenApi();
 
-// CORS for Keshav Singh ecosystem
+// CORS for Keshav Singh ecosystem + configured AllowedOrigins
 const string CorsPolicy = "SocialAnalyticsCors";
+var configuredOrigins = (builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? [])
+    .Select(o => o.Trim().TrimEnd('/'))
+    .Where(o => !string.IsNullOrEmpty(o))
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(CorsPolicy, policy =>
@@ -33,10 +42,11 @@ builder.Services.AddCors(options =>
         policy.SetIsOriginAllowed(origin =>
         {
             if (string.IsNullOrWhiteSpace(origin)) return false;
+            var normalized = origin.Trim().TrimEnd('/');
+            if (configuredOrigins.Contains(normalized)) return true;
             try
             {
-                var uri = new Uri(origin);
-                // Allow keshavsingh.in / *.keshavsingh.in, project GitHub Pages, or Render origins
+                var uri = new Uri(normalized);
                 if (uri.Host.Equals("keshavsingh.in", StringComparison.OrdinalIgnoreCase) ||
                     uri.Host.EndsWith(".keshavsingh.in", StringComparison.OrdinalIgnoreCase)) return true;
                 if (uri.Host.Equals("keshavsingh3197.github.io", StringComparison.OrdinalIgnoreCase)) return true;
@@ -76,7 +86,26 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateIssuerSigningKey = true,
             ValidateLifetime = true,
+            RoleClaimType = ClaimTypes.Role,
+            NameClaimType = "name",
             ClockSkew = TimeSpan.FromSeconds(30)
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = context =>
+            {
+                // Normalize short "role" claims to ClaimTypes.Role if issued without full schema URI.
+                if (context.Principal?.Identity is ClaimsIdentity identity)
+                {
+                    var shortRoles = identity.FindAll("role").Select(c => c.Value).ToList();
+                    foreach (var role in shortRoles)
+                    {
+                        if (!identity.HasClaim(ClaimTypes.Role, role))
+                            identity.AddClaim(new Claim(ClaimTypes.Role, role));
+                    }
+                }
+                return Task.CompletedTask;
+            }
         };
     });
 
@@ -94,13 +123,23 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 // Dedicated health endpoint for Render health checks
-app.MapGet("/health", () => Results.Ok(new
+app.MapGet("/health", (HybridDataStore store) => Results.Ok(new
 {
     status = "Healthy",
     service = "SocialAnalytics.Api",
-    version = "1.0.0",
+    version = "2.0.0",
+    storage = store.StorageMode,
     time = DateTime.UtcNow
 }));
+
+// Direct server-side tracked redirect endpoint for short links shared externally
+app.MapGet("/t/{slug}", async (string slug, FunnelService funnelService) =>
+{
+    var tracked = await funnelService.TrackClickAsync(slug);
+    return tracked is not null
+        ? Results.Redirect(tracked.DestinationUrl)
+        : Results.NotFound(new { message = "Tracking campaign not found or inactive." });
+});
 
 app.MapControllers();
 

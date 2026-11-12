@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, tap } from 'rxjs';
+import { Observable, catchError, map, of, shareReplay, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Role, SsoSession, UserProfile } from '../models/auth.models';
 
@@ -22,10 +22,30 @@ export class AuthService {
     return !!u && roles.some((r) => u.roles.includes(r));
   }
 
+  private initStream$?: Observable<boolean>;
+
+  readonly isAdmin = computed(() => this.hasRole('Admin'));
+
+  /** Ensures the initial SSO check runs at most once per page load and shares its completion. */
+  ensureInitialized(): Observable<boolean> {
+    if (!this.initStream$) {
+      this.initStream$ = this.refresh().pipe(
+        map(() => true),
+        catchError(() => of(false)),
+        shareReplay(1)
+      );
+    }
+    return this.initStream$;
+  }
+
   /** Exchange the shared SSO cookie for a fresh access token. 401 => not signed in. */
   refresh(): Observable<SsoSession> {
     return this.http
-      .post<SsoSession>(`${environment.idpUrl}/sso/session`, {}, { withCredentials: true })
+      .post<SsoSession>(
+        `${environment.idpUrl}/sso/session?app=${encodeURIComponent(environment.appCode)}`,
+        {},
+        { withCredentials: true }
+      )
       .pipe(tap((session) => this.setSession(session)));
   }
 

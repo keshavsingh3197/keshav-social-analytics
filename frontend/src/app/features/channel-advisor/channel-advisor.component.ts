@@ -2,7 +2,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AnalyticsService } from '../../core/services/analytics.service';
-import { ChannelAuditResult, SocialPlatform } from '../../core/models/analytics.models';
+import { ChannelAuditResult, ChannelMetrics, SocialPlatform } from '../../core/models/analytics.models';
 
 @Component({
   selector: 'app-channel-advisor',
@@ -14,15 +14,24 @@ import { ChannelAuditResult, SocialPlatform } from '../../core/models/analytics.
         <h1>🚀 Channel Growth Advisor & AI Recommendations</h1>
         <p>
           Diagnose performance bottlenecks, optimize viewer retention curves, and discover algorithmic 
-          recommendations to increase view velocity and subscribers across your social channels.
+          recommendations computed from live channel metrics.
         </p>
       </div>
 
       <!-- Channel Search / Selection Bar -->
       <div class="search-bar-card">
         <div class="input-wrap">
-          <label>Select Channel / Handle to Audit</label>
+          <label>Select Connected Channel or Enter Handle to Audit</label>
           <div class="input-action-row">
+            @if (channels().length > 0) {
+              <select (change)="selectConnectedChannel($event)" class="form-select">
+                @for (ch of channels(); track ch.id) {
+                  <option [value]="ch.id" [selected]="ch.channelHandle === selectedHandle()">
+                    {{ ch.channelName }} ({{ ch.platform }})
+                  </option>
+                }
+              </select>
+            }
             <input 
               type="text" 
               [ngModel]="selectedHandle()" 
@@ -33,6 +42,8 @@ import { ChannelAuditResult, SocialPlatform } from '../../core/models/analytics.
               <option value="YouTube">YouTube</option>
               <option value="Instagram">Instagram</option>
               <option value="Facebook">Facebook</option>
+              <option value="TikTok">TikTok</option>
+              <option value="LinkedIn">LinkedIn</option>
             </select>
             <button (click)="runAudit()" class="btn-audit">Audit Channel</button>
           </div>
@@ -47,11 +58,9 @@ import { ChannelAuditResult, SocialPlatform } from '../../core/models/analytics.
             <span class="score-max">/ 100</span>
           </div>
           <div class="audit-summary-text">
-            <h2>Channel Algorithmic Health: Excellent</h2>
+            <h2>Channel Algorithmic Health: {{ healthLabel(audit.healthScoreOutOf100) }}</h2>
             <p>
-              Your channel <strong>{{ audit.channelHandle }}</strong> shows strong organic momentum. 
-              Implementing the priority optimizations below will significantly elevate initial 2-hour velocity 
-              and improve conversion to sibling web assets.
+              Audit for <strong>{{ audit.channelHandle }}</strong> computed against configured target engagement and watch-duration benchmarks.
             </p>
           </div>
         </div>
@@ -317,12 +326,37 @@ import { ChannelAuditResult, SocialPlatform } from '../../core/models/analytics.
 export class ChannelAdvisorComponent implements OnInit {
   private analytics = inject(AnalyticsService);
 
+  readonly channels = signal<ChannelMetrics[]>([]);
   readonly selectedHandle = signal('@KeshavSingh');
   readonly selectedPlatform = signal<SocialPlatform>('YouTube');
   readonly auditResult = signal<ChannelAuditResult | null>(null);
 
   ngOnInit(): void {
-    this.runAudit();
+    this.analytics.getChannels().subscribe(list => {
+      this.channels.set(list);
+      if (list.length > 0) {
+        this.selectedHandle.set(list[0].channelHandle);
+        this.selectedPlatform.set(list[0].platform);
+      }
+      this.runAudit();
+    });
+  }
+
+  selectConnectedChannel(event: Event): void {
+    const id = (event.target as HTMLSelectElement).value;
+    const matched = this.channels().find(c => c.id === id);
+    if (matched) {
+      this.selectedHandle.set(matched.channelHandle);
+      this.selectedPlatform.set(matched.platform);
+      this.runAudit();
+    }
+  }
+
+  healthLabel(score: number): string {
+    if (score >= 85) return 'Excellent';
+    if (score >= 70) return 'Strong';
+    if (score >= 55) return 'Moderate';
+    return 'Needs Attention';
   }
 
   runAudit(): void {
