@@ -21,8 +21,8 @@ builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(
         new System.Text.Json.Serialization.JsonStringEnumConverter()));
 
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+// Native .NET OpenAPI
+builder.Services.AddOpenApi();
 
 // CORS for Keshav Singh ecosystem
 const string CorsPolicy = "SocialAnalyticsCors";
@@ -84,13 +84,21 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapOpenApi();
 }
 
 app.UseCors(CorsPolicy);
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Dedicated health endpoint for Render health checks
+app.MapGet("/health", () => Results.Ok(new
+{
+    status = "Healthy",
+    service = "SocialAnalytics.Api",
+    version = "1.0.0",
+    time = DateTime.UtcNow
+}));
 
 app.MapControllers();
 
