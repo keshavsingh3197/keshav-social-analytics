@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AnalyticsService } from '../../core/services/analytics.service';
@@ -29,7 +29,7 @@ import { EarningsCalculationRequest, EarningsReport, SocialPlatform } from '../.
               @for (plat of platforms; track plat) {
                 <button 
                   type="button"
-                  [class.active]="request.platform === plat"
+                  [class.active]="request().platform === plat"
                   (click)="setPlatform(plat)"
                   class="plat-btn">
                   {{ plat }}
@@ -40,7 +40,7 @@ import { EarningsCalculationRequest, EarningsReport, SocialPlatform } from '../.
 
           <div class="control-group">
             <label>Content Niche</label>
-            <select [(ngModel)]="request.niche" (change)="onNicheChange()" class="form-input">
+            <select [ngModel]="request().niche" (ngModelChange)="onNicheChange($event)" class="form-input">
               <option value="Tech & Dev">Tech & Dev (Higher RPM: \$4 - \$9)</option>
               <option value="AI & Animation">AI & Animation (RPM: \$3 - \$6)</option>
               <option value="Culture & Panchang">Culture & History (RPM: \$1.5 - \$3.5)</option>
@@ -52,45 +52,45 @@ import { EarningsCalculationRequest, EarningsReport, SocialPlatform } from '../.
           <div class="control-group">
             <div class="label-row">
               <label>Monthly Traffic / Views</label>
-              <span class="val-highlight">{{ request.monthlyViews | number }} views</span>
+              <span class="val-highlight">{{ request().monthlyViews | number }} views</span>
             </div>
             <input 
               type="range" 
               min="10000" 
               max="2000000" 
               step="10000" 
-              [(ngModel)]="request.monthlyViews" 
-              (input)="recalculate()"
+              [ngModel]="request().monthlyViews" 
+              (ngModelChange)="updateNumericField('monthlyViews', $event)"
               class="range-slider" />
           </div>
 
           <div class="control-group">
             <div class="label-row">
               <label>Estimated RPM (Ad Revenue per 1,000 views)</label>
-              <span class="val-highlight">\${{ request.estimatedRpm }}</span>
+              <span class="val-highlight">\${{ request().estimatedRpm }}</span>
             </div>
             <input 
               type="range" 
               min="0.5" 
               max="15.0" 
               step="0.25" 
-              [(ngModel)]="request.estimatedRpm" 
-              (input)="recalculate()"
+              [ngModel]="request().estimatedRpm" 
+              (ngModelChange)="updateNumericField('estimatedRpm', $event)"
               class="range-slider" />
           </div>
 
           <div class="control-group">
             <div class="label-row">
               <label>Monthly Sponsorship Deals</label>
-              <span class="val-highlight">{{ request.monthlySponsorshipDeals }} deal(s)</span>
+              <span class="val-highlight">{{ request().monthlySponsorshipDeals }} deal(s)</span>
             </div>
             <input 
               type="range" 
               min="0" 
               max="6" 
               step="1" 
-              [(ngModel)]="request.monthlySponsorshipDeals" 
-              (input)="recalculate()"
+              [ngModel]="request().monthlySponsorshipDeals" 
+              (ngModelChange)="updateNumericField('monthlySponsorshipDeals', $event)"
               class="range-slider" />
           </div>
 
@@ -98,43 +98,43 @@ import { EarningsCalculationRequest, EarningsReport, SocialPlatform } from '../.
             <label>Avg Sponsorship Deal Payout ($)</label>
             <input 
               type="number" 
-              [(ngModel)]="request.avgSponsorshipRate" 
-              (input)="recalculate()" 
+              [ngModel]="request().avgSponsorshipRate" 
+              (ngModelChange)="updateNumericField('avgSponsorshipRate', $event)" 
               class="form-input" />
           </div>
 
           <div class="control-group">
             <div class="label-row">
               <label>Affiliate / Sibling Website Conversion (%)</label>
-              <span class="val-highlight">{{ request.affiliateConversionRatePercentage }}%</span>
+              <span class="val-highlight">{{ request().affiliateConversionRatePercentage }}%</span>
             </div>
             <input 
               type="range" 
               min="0.1" 
               max="2.5" 
               step="0.1" 
-              [(ngModel)]="request.affiliateConversionRatePercentage" 
-              (input)="recalculate()"
+              [ngModel]="request().affiliateConversionRatePercentage" 
+              (ngModelChange)="updateNumericField('affiliateConversionRatePercentage', $event)"
               class="range-slider" />
           </div>
         </div>
 
         <!-- Live Projection Result Panel -->
         <div class="results-panel">
-          @if (report) {
+          @if (report(); as rep) {
             <div class="summary-hero">
               <span class="hero-lbl">Total Estimated Monthly Income</span>
-              <div class="hero-amount">\${{ report.totalEstimatedMonthlyRevenue | number }}</div>
-              <span class="hero-sub">(\${{ report.totalEstimatedYearlyRevenue | number }} projected annually)</span>
+              <div class="hero-amount">\${{ rep.totalEstimatedMonthlyRevenue | number }}</div>
+              <span class="hero-sub">(\${{ rep.totalEstimatedYearlyRevenue | number }} projected annually)</span>
               <div class="effective-rpm-chip">
-                Effective RPM across all streams: <strong>\${{ report.effectiveRpm }}</strong> / 1k views
+                Effective RPM across all streams: <strong>\${{ rep.effectiveRpm }}</strong> / 1k views
               </div>
             </div>
 
             <div class="streams-breakdown">
               <h3>Revenue Streams Distribution</h3>
               <div class="stream-bars">
-                @for (stream of report.streams; track stream.streamName) {
+                @for (stream of rep.streams; track stream.streamName) {
                   <div class="stream-item">
                     <div class="st-info">
                       <span class="st-name">{{ stream.streamName }}</span>
@@ -151,7 +151,7 @@ import { EarningsCalculationRequest, EarningsReport, SocialPlatform } from '../.
             <div class="monetization-tips">
               <h3>💡 High-ROI Monetization Actions</h3>
               <ul>
-                @for (tip of report.monetizationOpportunities; track tip) {
+                @for (tip of rep.monetizationOpportunities; track tip) {
                   <li>{{ tip }}</li>
                 }
               </ul>
@@ -356,7 +356,7 @@ export class EarningsCalculatorComponent implements OnInit {
   private analytics = inject(AnalyticsService);
 
   platforms: SocialPlatform[] = ['YouTube', 'Instagram', 'Facebook', 'TikTok'];
-  request: EarningsCalculationRequest = {
+  readonly request = signal<EarningsCalculationRequest>({
     platform: 'YouTube',
     niche: 'Tech & Dev',
     monthlyViews: 250000,
@@ -365,32 +365,44 @@ export class EarningsCalculatorComponent implements OnInit {
     avgSponsorshipRate: 650,
     affiliateConversionRatePercentage: 0.6,
     avgAffiliatePayout: 18
-  };
+  });
 
-  report: EarningsReport | null = null;
+  readonly report = signal<EarningsReport | null>(null);
 
   ngOnInit(): void {
     this.recalculate();
   }
 
   setPlatform(plat: SocialPlatform): void {
-    this.request.platform = plat;
-    if (plat === 'YouTube') this.request.estimatedRpm = 4.5;
-    if (plat === 'Instagram') this.request.estimatedRpm = 1.8;
-    if (plat === 'Facebook') this.request.estimatedRpm = 2.2;
-    if (plat === 'TikTok') this.request.estimatedRpm = 1.0;
+    let estimatedRpm = this.request().estimatedRpm;
+    if (plat === 'YouTube') estimatedRpm = 4.5;
+    if (plat === 'Instagram') estimatedRpm = 1.8;
+    if (plat === 'Facebook') estimatedRpm = 2.2;
+    if (plat === 'TikTok') estimatedRpm = 1.0;
+    this.request.update(r => ({ ...r, platform: plat, estimatedRpm }));
     this.recalculate();
   }
 
-  onNicheChange(): void {
-    if (this.request.niche.includes('Finance')) this.request.estimatedRpm = 9.5;
-    else if (this.request.niche.includes('Tech')) this.request.estimatedRpm = 5.0;
-    else if (this.request.niche.includes('Culture')) this.request.estimatedRpm = 2.5;
-    else this.request.estimatedRpm = 2.0;
+  onNicheChange(niche: string): void {
+    let estimatedRpm = 2.0;
+    if (niche.includes('Finance')) estimatedRpm = 9.5;
+    else if (niche.includes('Tech')) estimatedRpm = 5.0;
+    else if (niche.includes('Culture')) estimatedRpm = 2.5;
+    this.request.update(r => ({ ...r, niche, estimatedRpm }));
+    this.recalculate();
+  }
+
+  updateNumericField(
+    key: 'monthlyViews' | 'estimatedRpm' | 'monthlySponsorshipDeals' | 'avgSponsorshipRate' | 'affiliateConversionRatePercentage',
+    rawValue: unknown
+  ): void {
+    const val = Number(rawValue);
+    if (!Number.isFinite(val)) return;
+    this.request.update(r => ({ ...r, [key]: val }));
     this.recalculate();
   }
 
   recalculate(): void {
-    this.analytics.calculateEarnings(this.request).subscribe(rep => this.report = rep);
+    this.analytics.calculateEarnings(this.request()).subscribe(rep => this.report.set(rep));
   }
 }

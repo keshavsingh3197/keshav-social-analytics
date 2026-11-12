@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AnalyticsService } from '../../core/services/analytics.service';
@@ -65,21 +65,27 @@ import { FunnelCampaign } from '../../core/models/analytics.models';
         <div class="form-row">
           <input 
             type="text" 
-            [(ngModel)]="newCampaign.title" 
+            [ngModel]="campaignTitle()" 
+            (ngModelChange)="campaignTitle.set($event)"
             placeholder="Campaign Title (e.g. YouTube Video #45 Link)" 
             class="f-input" />
           <input 
             type="text" 
-            [(ngModel)]="newCampaign.sourcePlatform" 
+            [ngModel]="campaignSource()" 
+            (ngModelChange)="campaignSource.set($event)"
             placeholder="Source (e.g. YouTube Description)" 
             class="f-input" />
           <input 
             type="text" 
-            [(ngModel)]="newCampaign.destinationUrl" 
+            [ngModel]="campaignDestination()" 
+            (ngModelChange)="campaignDestination.set($event)"
             placeholder="Destination URL (https://...)" 
             class="f-input" />
           <button (click)="submitCampaign()" class="btn-create">Create Funnel</button>
         </div>
+        @if (statusMessage(); as msg) {
+          <div class="status-toast">{{ msg }}</div>
+        }
       </section>
 
       <!-- Active Campaigns Table -->
@@ -100,7 +106,7 @@ import { FunnelCampaign } from '../../core/models/analytics.models';
               </tr>
             </thead>
             <tbody>
-              @for (camp of campaigns; track camp.id) {
+              @for (camp of campaigns(); track camp.id) {
                 <tr>
                   <td><strong>{{ camp.title }}</strong></td>
                   <td><span class="source-tag">{{ camp.sourcePlatform }}</span></td>
@@ -319,22 +325,26 @@ import { FunnelCampaign } from '../../core/models/analytics.models';
       cursor: pointer;
     }
     .btn-snippet:hover { background: #1d4ed8; }
+    .status-toast {
+      margin-top: 0.75rem;
+      background: #ecfdf5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+      padding: 0.5rem 0.85rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
   `]
 })
 export class TrafficFunnelComponent implements OnInit {
   private analytics = inject(AnalyticsService);
 
-  campaigns: FunnelCampaign[] = [];
-  newCampaign: FunnelCampaign = {
-    title: '',
-    sourcePlatform: 'YouTube Description',
-    destinationUrl: 'https://studio.keshavsingh.in',
-    trackingSlug: '',
-    totalClicks: 0,
-    conversions: 0,
-    conversionRatePercentage: 0,
-    isActive: true
-  };
+  readonly campaigns = signal<FunnelCampaign[]>([]);
+  readonly campaignTitle = signal('');
+  readonly campaignSource = signal('YouTube Description');
+  readonly campaignDestination = signal('https://studio.keshavsingh.in');
+  readonly statusMessage = signal<string | null>(null);
 
   videoDescriptionSnippet: string = 
 `🚀 Explore Keshav Singh Ecosystem Tools:
@@ -347,31 +357,37 @@ export class TrafficFunnelComponent implements OnInit {
 #KeshavSingh #AIAnimation #HinduPanchang #WebDev`;
 
   ngOnInit(): void {
-    this.analytics.getCampaigns().subscribe(c => this.campaigns = c);
+    this.analytics.getCampaigns().subscribe(c => this.campaigns.set(c));
   }
 
   submitCampaign(): void {
-    if (!this.newCampaign.title || !this.newCampaign.destinationUrl) return;
-    if (!this.newCampaign.trackingSlug) {
-      this.newCampaign.trackingSlug = 'c-' + Math.random().toString(36).substring(2, 7);
-    }
-    this.analytics.createCampaign({ ...this.newCampaign }).subscribe(camp => {
-      this.campaigns.unshift(camp);
-      this.newCampaign = {
-        title: '',
-        sourcePlatform: 'YouTube Description',
-        destinationUrl: 'https://studio.keshavsingh.in',
-        trackingSlug: '',
-        totalClicks: 0,
-        conversions: 0,
-        conversionRatePercentage: 0,
-        isActive: true
-      };
+    const title = this.campaignTitle().trim();
+    const destinationUrl = this.campaignDestination().trim();
+    const sourcePlatform = this.campaignSource().trim() || 'YouTube Description';
+    if (!title || !destinationUrl) return;
+
+    const payload: FunnelCampaign = {
+      title,
+      sourcePlatform,
+      destinationUrl,
+      trackingSlug: 'c-' + Math.random().toString(36).substring(2, 7),
+      totalClicks: 0,
+      conversions: 0,
+      conversionRatePercentage: 0,
+      isActive: true
+    };
+
+    this.analytics.createCampaign(payload).subscribe(camp => {
+      this.campaigns.update(list => [camp, ...list]);
+      this.campaignTitle.set('');
+      this.campaignSource.set('YouTube Description');
+      this.campaignDestination.set('https://studio.keshavsingh.in');
+      this.showStatus(`Created funnel campaign "${camp.title}"`);
     });
   }
 
   createEcosystemCampaign(title: string, destination: string, slug: string): void {
-    const existing = this.campaigns.find(c => c.trackingSlug === slug);
+    const existing = this.campaigns().find(c => c.trackingSlug === slug);
     if (!existing) {
       this.analytics.createCampaign({
         title,
@@ -382,18 +398,32 @@ export class TrafficFunnelComponent implements OnInit {
         conversions: 18,
         conversionRatePercentage: 15.0,
         isActive: true
-      }).subscribe(c => this.campaigns.unshift(c));
+      }).subscribe(c => {
+        this.campaigns.update(list => [c, ...list]);
+        this.copyLink(c.trackingSlug);
+      });
+    } else {
+      this.copyLink(existing.trackingSlug);
     }
   }
 
   copyLink(slug: string): void {
     const url = `https://social.keshavsingh.in/t/${slug}`;
     navigator.clipboard?.writeText(url);
-    alert(`Copied link to clipboard: ${url}`);
+    this.showStatus(`Copied tracked link: ${url}`);
   }
 
   copySnippet(): void {
     navigator.clipboard?.writeText(this.videoDescriptionSnippet);
-    alert('Copied YouTube Description Template to clipboard!');
+    this.showStatus('Copied YouTube Description Template to clipboard!');
+  }
+
+  private showStatus(msg: string): void {
+    this.statusMessage.set(msg);
+    setTimeout(() => {
+      if (this.statusMessage() === msg) {
+        this.statusMessage.set(null);
+      }
+    }, 4000);
   }
 }
