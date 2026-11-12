@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY ["SocialAnalytics.Api/SocialAnalytics.Api.csproj", "SocialAnalytics.Api/"]
 RUN dotnet restore "SocialAnalytics.Api/SocialAnalytics.Api.csproj"
@@ -6,9 +6,9 @@ COPY . .
 WORKDIR "/src/SocialAnalytics.Api"
 RUN dotnet publish "SocialAnalytics.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
-ENV ASPNETCORE_URLS=http://+:5080
-EXPOSE 5080
+ENV ASPNETCORE_URLS=http://+:8080
+EXPOSE 8080
 ENTRYPOINT ["dotnet", "SocialAnalytics.Api.dll"]
