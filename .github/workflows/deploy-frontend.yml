@@ -48,7 +48,7 @@ jobs:
           OUT=dist/social-analytics/browser
           [ -d "$OUT" ] || OUT=dist/frontend/browser
           cp "$OUT/index.html" "$OUT/404.html"
-          for route in dashboard earnings advisor funnel; do
+          for route in dashboard earnings advisor funnel admin; do
             mkdir -p "$OUT/$route"
             cp "$OUT/index.html" "$OUT/$route/index.html"
           done

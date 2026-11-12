@@ -1,8 +1,10 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AnalyticsService } from '../../core/services/analytics.service';
-import { ChannelMetrics, PlatformSummary } from '../../core/models/analytics.models';
+import { EcosystemConfigService } from '../../core/services/ecosystem-config.service';
+import { AuthService } from '../../core/services/auth.service';
+import { ChannelMetrics, PlatformSummary, SiteConfig } from '../../core/models/analytics.models';
 
 @Component({
   selector: 'app-dashboard',
@@ -10,18 +12,27 @@ import { ChannelMetrics, PlatformSummary } from '../../core/models/analytics.mod
   imports: [CommonModule, RouterLink],
   template: `
     <div class="dashboard-page">
+      @if (adminDenied()) {
+        <div class="alert-banner">
+          <span>🛡️ <strong>Admin Access Required:</strong> Only users with the <code>Admin</code> role can open the Analytics Admin Console.</span>
+          <button type="button" (click)="dismissDenied()" class="alert-close">✕</button>
+        </div>
+      }
+
       <!-- Welcome Hero Banner -->
       <section class="hero-banner">
         <div class="hero-content">
-          <h1>Social Channel Performance & Growth Hub</h1>
+          <h1>{{ siteConfig()?.heroTitle || 'Social Channel Performance & Growth Hub' }}</h1>
           <p>
-            Track multi-platform engagement across YouTube, Instagram, and Facebook. Maximize audience retention, 
-            calculate creator earnings, and funnel viewer traffic directly into your monetized platforms.
+            {{ siteConfig()?.heroSubtitle || 'Track multi-platform engagement across YouTube, Instagram, and Facebook. Maximize audience retention, calculate creator earnings, and funnel viewer traffic directly into your monetized platforms.' }}
           </p>
           <div class="hero-cta-group">
             <a routerLink="/earnings" class="btn btn-primary">💰 Calculate Your Earnings</a>
             <a routerLink="/advisor" class="btn btn-secondary">🚀 View Growth Recommendations</a>
             <a routerLink="/funnel" class="btn btn-outline">🎯 Traffic Funnels</a>
+            @if (auth.isAdmin()) {
+              <a routerLink="/admin" class="btn btn-outline">🛡️ Admin Console</a>
+            }
           </div>
         </div>
         <div class="hero-stats-card">
@@ -125,21 +136,19 @@ import { ChannelMetrics, PlatformSummary } from '../../core/models/analytics.mod
         </div>
       </section>
 
-      <!-- Sibling Cross-Promotion & Traffic Generation Blocks -->
+      <!-- Sibling Cross-Promotion & Traffic Generation Blocks (Synced from Admin Ecosystem Registry) -->
       <section class="cross-promo-grid">
-        <div class="promo-card studio-card">
-          <div class="promo-tag">Featured Sibling App</div>
-          <h3>🎬 Keshav AnimStudio AI</h3>
-          <p>Generate viral 2D/3D AI animated stories and YouTube shorts in minutes. Directly boost video output and channel upload frequency.</p>
-          <a href="https://studio.keshavsingh.in" target="_blank" rel="noopener" class="btn btn-accent">Open Studio AI →</a>
-        </div>
-
-        <div class="promo-card panchang-card">
-          <div class="promo-tag">Daily Cultural Hub</div>
-          <h3>🕉️ Hindu Panchang & Aaj Ka Itihaas</h3>
-          <p>High-engagement daily Vedic calendar, spiritual video feeds, and historical incidents. Drive massive recurring daily visitors.</p>
-          <a href="https://panchang.keshavsingh.in" target="_blank" rel="noopener" class="btn btn-accent">Explore Panchang Hub →</a>
-        </div>
+        @for (site of promoSites(); track site.key) {
+          <div class="promo-card"
+               [class.studio-card]="site.key === 'studio'"
+               [class.panchang-card]="site.key === 'panchang'"
+               [class.sibling-card]="site.key !== 'studio' && site.key !== 'panchang'">
+            <div class="promo-tag">Ecosystem App</div>
+            <h3>{{ site.icon || '🌐' }} {{ site.name }}</h3>
+            <p>{{ site.description || 'Explore this live Keshav Singh ecosystem platform.' }}</p>
+            <a [href]="site.url" target="_blank" rel="noopener" class="btn btn-accent">Open {{ site.name }} →</a>
+          </div>
+        }
       </section>
     </div>
   `,
@@ -374,37 +383,74 @@ import { ChannelMetrics, PlatformSummary } from '../../core/models/analytics.mod
     }
     .studio-card { background: linear-gradient(135deg, #4f46e5 0%, #312e81 100%); }
     .panchang-card { background: linear-gradient(135deg, #d97706 0%, #78350f 100%); }
+    .sibling-card { background: linear-gradient(135deg, #0f766e 0%, #134e4a 100%); }
+    .alert-banner {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      padding: 0.85rem 1.15rem;
+      border-radius: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9rem;
+    }
+    .alert-close {
+      background: transparent;
+      border: none;
+      color: #991b1b;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 1rem;
+    }
     .promo-card h3 { margin: 0; font-size: 1.35rem; font-weight: 800; }
     .promo-card p { margin: 0; font-size: 0.95rem; opacity: 0.9; line-height: 1.5; }
   `]
 })
 export class DashboardComponent implements OnInit {
   private analytics = inject(AnalyticsService);
+  private ecosystem = inject(EcosystemConfigService);
+  private route = inject(ActivatedRoute);
+  readonly auth = inject(AuthService);
 
   readonly channels = signal<ChannelMetrics[]>([]);
   readonly platformSummaries = signal<PlatformSummary[]>([]);
+  readonly siteConfig = signal<SiteConfig | null>(null);
+  readonly loading = signal(true);
+  readonly adminDenied = signal(false);
+  readonly promoSites = computed(() => this.ecosystem.promoSiblingSites().slice(0, 4));
 
   readonly totalViewsLabel = computed(() => {
     const sum = this.platformSummaries().reduce((acc, s) => acc + s.totalViews, 0);
     if (sum >= 1_000_000) return `${(sum / 1_000_000).toFixed(2)}M+`;
     if (sum >= 1_000) return `${(sum / 1_000).toFixed(1)}K`;
-    return sum ? `${sum}` : '1.08M+';
+    return this.loading() ? '…' : `${sum}`;
   });
 
   readonly totalFollowersLabel = computed(() => {
     const sum = this.platformSummaries().reduce((acc, s) => acc + s.totalAudience, 0);
     if (sum >= 1_000) return `${(sum / 1_000).toFixed(1)}K`;
-    return sum ? `${sum}` : '93.2K';
+    return this.loading() ? '…' : `${sum}`;
   });
 
   readonly totalRevenue = computed(() => {
-    const sum = this.platformSummaries().reduce((acc, s) => acc + s.estimatedEarningsMonthly, 0);
-    return sum || 2720;
+    return this.platformSummaries().reduce((acc, s) => acc + s.estimatedEarningsMonthly, 0);
   });
 
   ngOnInit(): void {
+    this.route.queryParamMap.subscribe(params => {
+      this.adminDenied.set(params.get('denied') === 'admin');
+    });
     this.analytics.getChannels().subscribe(ch => this.channels.set(ch));
-    this.analytics.getOverview().subscribe(ov => this.platformSummaries.set(ov));
+    this.analytics.getOverview().subscribe(ov => {
+      this.platformSummaries.set(ov);
+      this.loading.set(false);
+    });
+    this.analytics.getSiteConfig().subscribe(cfg => this.siteConfig.set(cfg));
+  }
+
+  dismissDenied(): void {
+    this.adminDenied.set(false);
   }
 
   getPlatformIcon(platform: string): string {
@@ -413,6 +459,7 @@ export class DashboardComponent implements OnInit {
       case 'Instagram': return '📸';
       case 'Facebook': return '👥';
       case 'TikTok': return '🎵';
+      case 'LinkedIn': return '💼';
       default: return '🌐';
     }
   }

@@ -4,87 +4,84 @@ namespace SocialAnalytics.Api.Services;
 
 public class AnalyticsEngineService
 {
-    private static readonly List<ChannelMetrics> MockChannels = new()
-    {
-        new ChannelMetrics
-        {
-            Id = "ch-1",
-            ChannelName = "Keshav Singh Official",
-            ChannelHandle = "@KeshavSingh",
-            Platform = SocialPlatform.YouTube,
-            Niche = "AI, Animation & Dev",
-            FollowersOrSubscribers = 45200,
-            TotalViewsLast30Days = 384000,
-            EngagementRatePercentage = 7.4,
-            AverageViewDurationMinutes = 4.8,
-            VideosOrPostsCount = 142,
-            GrowthRateMonthlyPercentage = 12.5
-        },
-        new ChannelMetrics
-        {
-            Id = "ch-2",
-            ChannelName = "Keshav Dev & Stories",
-            ChannelHandle = "@KeshavStories",
-            Platform = SocialPlatform.Instagram,
-            Niche = "Culture & Short Stories",
-            FollowersOrSubscribers = 28600,
-            TotalViewsLast30Days = 512000,
-            EngagementRatePercentage = 8.9,
-            AverageViewDurationMinutes = 0.9,
-            VideosOrPostsCount = 210,
-            GrowthRateMonthlyPercentage = 18.2
-        },
-        new ChannelMetrics
-        {
-            Id = "ch-3",
-            ChannelName = "Keshav Cultural Page",
-            ChannelHandle = "keshav.cultural",
-            Platform = SocialPlatform.Facebook,
-            Niche = "Vedic Panchang & History",
-            FollowersOrSubscribers = 19400,
-            TotalViewsLast30Days = 180000,
-            EngagementRatePercentage = 5.2,
-            AverageViewDurationMinutes = 2.1,
-            VideosOrPostsCount = 88,
-            GrowthRateMonthlyPercentage = 6.4
-        }
-    };
+    private const string Collection = "channels";
+    private readonly HybridDataStore _store;
+    private readonly SocialConfigService _configService;
 
-    public Task<List<ChannelMetrics>> GetAllChannelsAsync()
+    public AnalyticsEngineService(HybridDataStore store, SocialConfigService configService)
     {
-        return Task.FromResult(MockChannels);
+        _store = store;
+        _configService = configService;
     }
 
-    public Task<List<PlatformSummary>> GetPlatformSummariesAsync()
+    public async Task<List<ChannelMetrics>> GetAllChannelsAsync(bool includeInactive = false)
     {
-        var summaries = new List<PlatformSummary>
-        {
-            new PlatformSummary
-            {
-                Platform = SocialPlatform.YouTube,
-                TotalAudience = 45200,
-                TotalViews = 384000,
-                AvgEngagement = 7.4,
-                EstimatedEarningsMonthly = 1450m
-            },
-            new PlatformSummary
-            {
-                Platform = SocialPlatform.Instagram,
-                TotalAudience = 28600,
-                TotalViews = 512000,
-                AvgEngagement = 8.9,
-                EstimatedEarningsMonthly = 850m
-            },
-            new PlatformSummary
-            {
-                Platform = SocialPlatform.Facebook,
-                TotalAudience = 19400,
-                TotalViews = 180000,
-                AvgEngagement = 5.2,
-                EstimatedEarningsMonthly = 420m
-            }
-        };
+        var channels = await _store.GetListAsync(Collection, SocialSeedData.DefaultChannels);
+        return (includeInactive ? channels : channels.Where(c => c.IsActive))
+            .OrderByDescending(c => c.TotalViewsLast30Days)
+            .ToList();
+    }
 
-        return Task.FromResult(summaries);
+    public async Task<ChannelMetrics> UpsertChannelAsync(ChannelMetrics channel)
+    {
+        if (string.IsNullOrWhiteSpace(channel.Id))
+            channel.Id = $"ch-{Guid.NewGuid():N}"[..10];
+
+        if (channel.EstimatedMonthlyRevenue <= 0 && channel.TotalViewsLast30Days > 0 && channel.RpmUsd > 0)
+            channel.EstimatedMonthlyRevenue = Math.Round((channel.TotalViewsLast30Days / 1000.0) * channel.RpmUsd, 2);
+
+        channel.LastUpdated = DateTime.UtcNow;
+        return await _store.UpsertItemAsync(Collection, channel.Id, c => c.Id, channel, SocialSeedData.DefaultChannels);
+    }
+
+    public Task<bool> DeleteChannelAsync(string id) =>
+        _store.DeleteItemAsync(Collection, id, c => c.Id, SocialSeedData.DefaultChannels);
+
+    public async Task<List<PlatformSummary>> GetPlatformSummariesAsync()
+    {
+        var channels = await GetAllChannelsAsync(includeInactive: false);
+        var earningsConfig = await _configService.GetEarningsConfigAsync();
+        var benchmarkMap = earningsConfig.PlatformBenchmarks
+            .ToDictionary(b => b.Platform, b => b.DefaultRpmUsd, StringComparer.OrdinalIgnoreCase);
+
+        var summaries = channels
+            .GroupBy(c => c.Platform)
+            .Select(group =>
+            {
+                var totalViews = group.Sum(c => c.TotalViewsLast30Days);
+                var totalAudience = group.Sum(c => c.FollowersOrSubscribers);
+                var avgEngagement = group.Any()
+                    ? Math.Round(group.Average(c => c.EngagementRatePercentage), 1)
+                    : 0;
+
+                decimal totalEarnings = 0m;
+                foreach (var ch in group)
+                {
+                    if (ch.EstimatedMonthlyRevenue > 0)
+                    {
+                        totalEarnings += (decimal)ch.EstimatedMonthlyRevenue;
+                    }
+                    else
+                    {
+                        var rpm = ch.RpmUsd > 0
+                            ? ch.RpmUsd
+                            : benchmarkMap.TryGetValue(ch.Platform.ToString(), out var fallback) ? fallback : 2.5;
+                        totalEarnings += (ch.TotalViewsLast30Days / 1000m) * (decimal)rpm;
+                    }
+                }
+
+                return new PlatformSummary
+                {
+                    Platform = group.Key,
+                    TotalAudience = totalAudience,
+                    TotalViews = totalViews,
+                    AvgEngagement = avgEngagement,
+                    EstimatedEarningsMonthly = Math.Round(totalEarnings, 2)
+                };
+            })
+            .OrderByDescending(s => s.EstimatedEarningsMonthly)
+            .ToList();
+
+        return summaries;
     }
 }

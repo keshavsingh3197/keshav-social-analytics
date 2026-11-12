@@ -3,6 +3,7 @@ import { RouterOutlet } from '@angular/router';
 import { EcosystemBarComponent } from './features/shared/ecosystem-bar/ecosystem-bar.component';
 import { HeaderComponent } from './features/shared/header/header.component';
 import { AuthService } from './core/services/auth.service';
+import { EcosystemConfigService } from './core/services/ecosystem-config.service';
 
 @Component({
   selector: 'app-root',
@@ -17,18 +18,17 @@ import { AuthService } from './core/services/auth.service';
     <footer class="app-footer">
       <div class="footer-container">
         <div class="footer-col">
-          <strong>SocialPulse by Keshav Singh</strong>
+          <strong>SocialPulse by {{ creatorName() }}</strong>
           <p>Creator analytics, traffic attribution & algorithmic monetization intelligence.</p>
         </div>
         <div class="footer-links">
-          <a href="https://studio.keshavsingh.in" target="_blank" rel="noopener">AnimStudio AI</a>
-          <a href="https://panchang.keshavsingh.in" target="_blank" rel="noopener">Hindu Panchang</a>
-          <a href="https://admin.keshavsingh.in" target="_blank" rel="noopener">Central SSO</a>
-          <a href="https://git.keshavsingh.in" target="_blank" rel="noopener">Engineering Blog</a>
+          @for (site of footerSites(); track site.key) {
+            <a [href]="site.url" target="_blank" rel="noopener">{{ site.name }}</a>
+          }
         </div>
       </div>
       <div class="footer-bottom">
-        © 2026 Keshav Singh. Part of the keshavsingh.in ecosystem. All rights reserved.
+        {{ copyrightNotice() }}
       </div>
     </footer>
   `,
@@ -94,17 +94,14 @@ import { AuthService } from './core/services/auth.service';
 })
 export class AppComponent implements OnInit {
   private auth = inject(AuthService);
+  private ecosystem = inject(EcosystemConfigService);
+
+  readonly footerSites = this.ecosystem.footerSites;
+  readonly copyrightNotice = this.ecosystem.copyrightNotice;
+  readonly creatorName = this.ecosystem.creatorName;
 
   ngOnInit(): void {
-    // Attempt silent SSO session resolution via .keshavsingh.in cookie
-    this.auth.refresh().subscribe({
-      next: (session) => {
-        console.log('SSO session restored successfully for:', session.user.email);
-      },
-      error: () => {
-        // Public visitors stay unauthenticated gracefully, allowing access to calculators and public stats
-        console.log('No active SSO session found. Operating in public visitor mode.');
-      }
-    });
+    this.ecosystem.load();
+    this.auth.ensureInitialized().subscribe();
   }
 }

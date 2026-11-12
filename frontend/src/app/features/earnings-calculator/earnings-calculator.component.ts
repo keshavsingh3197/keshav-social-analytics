@@ -1,8 +1,13 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AnalyticsService } from '../../core/services/analytics.service';
-import { EarningsCalculationRequest, EarningsReport, SocialPlatform } from '../../core/models/analytics.models';
+import {
+  EarningsCalculationRequest,
+  EarningsConfig,
+  EarningsReport,
+  SocialPlatform
+} from '../../core/models/analytics.models';
 
 @Component({
   selector: 'app-earnings-calculator',
@@ -14,7 +19,7 @@ import { EarningsCalculationRequest, EarningsReport, SocialPlatform } from '../.
         <h1>💰 Creator Earnings & RPM Calculator</h1>
         <p>
           Simulate revenue potential across YouTube, Instagram, and Facebook. Calculate AdSense RPM, 
-          brand sponsorships, and website referral affiliate earnings based on actual traffic sessions.
+          brand sponsorships, and website referral affiliate earnings based on live configured benchmarks.
         </p>
       </div>
 
@@ -26,13 +31,13 @@ import { EarningsCalculationRequest, EarningsReport, SocialPlatform } from '../.
           <div class="control-group">
             <label>Platform</label>
             <div class="platform-selector">
-              @for (plat of platforms; track plat) {
+              @for (bench of benchmarks(); track bench.platform) {
                 <button 
                   type="button"
-                  [class.active]="request().platform === plat"
-                  (click)="setPlatform(plat)"
+                  [class.active]="request().platform === bench.platform"
+                  (click)="setPlatform(bench.platform)"
                   class="plat-btn">
-                  {{ plat }}
+                  {{ bench.icon }} {{ bench.platform }}
                 </button>
               }
             </div>
@@ -41,11 +46,11 @@ import { EarningsCalculationRequest, EarningsReport, SocialPlatform } from '../.
           <div class="control-group">
             <label>Content Niche</label>
             <select [ngModel]="request().niche" (ngModelChange)="onNicheChange($event)" class="form-input">
-              <option value="Tech & Dev">Tech & Dev (Higher RPM: \$4 - \$9)</option>
-              <option value="AI & Animation">AI & Animation (RPM: \$3 - \$6)</option>
-              <option value="Culture & Panchang">Culture & History (RPM: \$1.5 - \$3.5)</option>
-              <option value="Finance & Investing">Finance & Investing (Highest RPM: \$8 - \$18)</option>
-              <option value="Entertainment & Vlogs">Entertainment & Vlogs (RPM: \$1.2 - \$2.5)</option>
+              @for (niche of niches(); track niche.id) {
+                <option [value]="niche.name">
+                  {{ niche.name }} (RPM: \${{ niche.minRpmUsd }} - \${{ niche.maxRpmUsd }})
+                </option>
+              }
             </select>
           </div>
 
@@ -355,14 +360,17 @@ import { EarningsCalculationRequest, EarningsReport, SocialPlatform } from '../.
 export class EarningsCalculatorComponent implements OnInit {
   private analytics = inject(AnalyticsService);
 
-  platforms: SocialPlatform[] = ['YouTube', 'Instagram', 'Facebook', 'TikTok'];
+  readonly config = signal<EarningsConfig | null>(null);
+  readonly benchmarks = computed(() => this.config()?.platformBenchmarks ?? []);
+  readonly niches = computed(() => this.config()?.niches ?? []);
+
   readonly request = signal<EarningsCalculationRequest>({
     platform: 'YouTube',
-    niche: 'Tech & Dev',
-    monthlyViews: 250000,
-    estimatedRpm: 4.5,
-    monthlySponsorshipDeals: 2,
-    avgSponsorshipRate: 650,
+    niche: 'Tech, AI & Software Engineering',
+    monthlyViews: 384000,
+    estimatedRpm: 3.78,
+    monthlySponsorshipDeals: 1,
+    avgSponsorshipRate: 500,
     affiliateConversionRatePercentage: 0.6,
     avgAffiliatePayout: 18
   });
@@ -370,25 +378,47 @@ export class EarningsCalculatorComponent implements OnInit {
   readonly report = signal<EarningsReport | null>(null);
 
   ngOnInit(): void {
+    this.analytics.getEarningsConfig().subscribe(cfg => {
+      this.config.set(cfg);
+      const firstBench = cfg.platformBenchmarks[0];
+      const firstNiche = cfg.niches[0];
+      if (firstBench) {
+        this.request.update(r => ({
+          ...r,
+          platform: (firstBench.platform as SocialPlatform) || 'YouTube',
+          niche: firstNiche?.name || r.niche,
+          monthlyViews: firstBench.defaultMonthlyViews,
+          estimatedRpm: firstBench.defaultRpmUsd,
+          avgSponsorshipRate: firstBench.defaultSponsorshipUsd,
+          affiliateConversionRatePercentage: firstBench.affiliateConversionRatePercent,
+          avgAffiliatePayout: firstBench.avgOrderValueUsd
+        }));
+      }
+      this.recalculate();
+    });
+  }
+
+  setPlatform(plat: string): void {
+    const bench = this.benchmarks().find(b => b.platform.toLowerCase() === plat.toLowerCase());
+    this.request.update(r => ({
+      ...r,
+      platform: plat as SocialPlatform,
+      monthlyViews: bench?.defaultMonthlyViews ?? r.monthlyViews,
+      estimatedRpm: bench?.defaultRpmUsd ?? r.estimatedRpm,
+      avgSponsorshipRate: bench?.defaultSponsorshipUsd ?? r.avgSponsorshipRate,
+      affiliateConversionRatePercentage: bench?.affiliateConversionRatePercent ?? r.affiliateConversionRatePercentage,
+      avgAffiliatePayout: bench?.avgOrderValueUsd ?? r.avgAffiliatePayout
+    }));
     this.recalculate();
   }
 
-  setPlatform(plat: SocialPlatform): void {
-    let estimatedRpm = this.request().estimatedRpm;
-    if (plat === 'YouTube') estimatedRpm = 4.5;
-    if (plat === 'Instagram') estimatedRpm = 1.8;
-    if (plat === 'Facebook') estimatedRpm = 2.2;
-    if (plat === 'TikTok') estimatedRpm = 1.0;
-    this.request.update(r => ({ ...r, platform: plat, estimatedRpm }));
-    this.recalculate();
-  }
-
-  onNicheChange(niche: string): void {
-    let estimatedRpm = 2.0;
-    if (niche.includes('Finance')) estimatedRpm = 9.5;
-    else if (niche.includes('Tech')) estimatedRpm = 5.0;
-    else if (niche.includes('Culture')) estimatedRpm = 2.5;
-    this.request.update(r => ({ ...r, niche, estimatedRpm }));
+  onNicheChange(nicheName: string): void {
+    const niche = this.niches().find(n => n.name === nicheName);
+    this.request.update(r => ({
+      ...r,
+      niche: nicheName,
+      estimatedRpm: niche?.suggestedRpmUsd ?? r.estimatedRpm
+    }));
     this.recalculate();
   }
 

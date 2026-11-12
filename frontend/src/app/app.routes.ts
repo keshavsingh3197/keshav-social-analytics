@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { adminGuard } from './core/guards/auth.guard';
 
 export const routes: Routes = [
   {
@@ -21,6 +22,15 @@ export const routes: Routes = [
   {
     path: 'funnel',
     loadComponent: () => import('./features/traffic-funnel/traffic-funnel.component').then(m => m.TrafficFunnelComponent)
+  },
+  {
+    path: 't/:slug',
+    loadComponent: () => import('./features/traffic-funnel/funnel-redirect.component').then(m => m.FunnelRedirectComponent)
+  },
+  {
+    path: 'admin',
+    canActivate: [adminGuard],
+    loadComponent: () => import('./features/admin/social-admin.component').then(m => m.SocialAdminComponent)
   },
   {
     path: '**',
