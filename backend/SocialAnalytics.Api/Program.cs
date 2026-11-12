@@ -36,9 +36,10 @@ builder.Services.AddCors(options =>
             try
             {
                 var uri = new Uri(origin);
-                // Allow any keshavsingh.in domain or localhost in dev
+                // Allow any keshavsingh.in domain, github.io, or onrender.com
                 if (uri.Host.EndsWith("keshavsingh.in", StringComparison.OrdinalIgnoreCase)) return true;
                 if (uri.Host.EndsWith("github.io", StringComparison.OrdinalIgnoreCase)) return true;
+                if (uri.Host.EndsWith("onrender.com", StringComparison.OrdinalIgnoreCase)) return true;
                 if (builder.Environment.IsDevelopment() && (uri.Host == "localhost" || uri.Host == "127.0.0.1")) return true;
                 return false;
             }
