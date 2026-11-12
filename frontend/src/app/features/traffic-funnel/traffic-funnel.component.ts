@@ -1,0 +1,399 @@
+import { Component, OnInit, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { AnalyticsService } from '../../core/services/analytics.service';
+import { FunnelCampaign } from '../../core/models/analytics.models';
+
+@Component({
+  selector: 'app-traffic-funnel',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  template: `
+    <div class="funnel-page">
+      <div class="header-box">
+        <h1>🎯 Traffic Funnel & Link Conversion Engine</h1>
+        <p>
+          Convert YouTube video viewers and social traffic into website sessions, SaaS subscribers, 
+          and monetization opportunities. Generate trackable referral links for your video descriptions.
+        </p>
+      </div>
+
+      <!-- Quick Funnel Presets to Keshav Ecosystem -->
+      <section class="preset-section">
+        <h3>🚀 Instant Keshav Ecosystem Funnels</h3>
+        <p class="section-sub">Click to generate ready-to-paste video description links:</p>
+
+        <div class="preset-grid">
+          <div class="preset-card">
+            <div class="preset-icon">🎬</div>
+            <div class="preset-details">
+              <strong>Studio AnimStudio AI Funnel</strong>
+              <span>Target: studio.keshavsingh.in</span>
+            </div>
+            <button (click)="createEcosystemCampaign('Keshav AnimStudio AI', 'https://studio.keshavsingh.in', 'yt-animstudio')" class="btn-preset">
+              Generate Link
+            </button>
+          </div>
+
+          <div class="preset-card">
+            <div class="preset-icon">🕉️</div>
+            <div class="preset-details">
+              <strong>Daily Hindu Panchang Funnel</strong>
+              <span>Target: panchang.keshavsingh.in</span>
+            </div>
+            <button (click)="createEcosystemCampaign('Daily Panchang & Rashifal', 'https://panchang.keshavsingh.in', 'yt-panchang')" class="btn-preset">
+              Generate Link
+            </button>
+          </div>
+
+          <div class="preset-card">
+            <div class="preset-icon">✍️</div>
+            <div class="preset-details">
+              <strong>Dev Content Blog Funnel</strong>
+              <span>Target: git.keshavsingh.in</span>
+            </div>
+            <button (click)="createEcosystemCampaign('Engineering Blog Articles', 'https://git.keshavsingh.in', 'yt-blog')" class="btn-preset">
+              Generate Link
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Create Custom Campaign Modal/Bar -->
+      <section class="create-card">
+        <h3>Create New Tracked Campaign Link</h3>
+        <div class="form-row">
+          <input 
+            type="text" 
+            [(ngModel)]="newCampaign.title" 
+            placeholder="Campaign Title (e.g. YouTube Video #45 Link)" 
+            class="f-input" />
+          <input 
+            type="text" 
+            [(ngModel)]="newCampaign.sourcePlatform" 
+            placeholder="Source (e.g. YouTube Description)" 
+            class="f-input" />
+          <input 
+            type="text" 
+            [(ngModel)]="newCampaign.destinationUrl" 
+            placeholder="Destination URL (https://...)" 
+            class="f-input" />
+          <button (click)="submitCampaign()" class="btn-create">Create Funnel</button>
+        </div>
+      </section>
+
+      <!-- Active Campaigns Table -->
+      <section class="campaigns-section">
+        <h3>Active Traffic Campaigns & Conversion Metrics</h3>
+        <div class="table-wrap">
+          <table class="funnel-table">
+            <thead>
+              <tr>
+                <th>Campaign</th>
+                <th>Source Platform</th>
+                <th>Destination Target</th>
+                <th>Tracked Link</th>
+                <th>Clicks</th>
+                <th>Conversions</th>
+                <th>Conversion Rate</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (camp of campaigns; track camp.id) {
+                <tr>
+                  <td><strong>{{ camp.title }}</strong></td>
+                  <td><span class="source-tag">{{ camp.sourcePlatform }}</span></td>
+                  <td><a [href]="camp.destinationUrl" target="_blank" rel="noopener" class="dest-link">{{ camp.destinationUrl }}</a></td>
+                  <td>
+                    <code class="slug-code">https://social.keshavsingh.in/t/{{ camp.trackingSlug }}</code>
+                  </td>
+                  <td><strong>{{ camp.totalClicks | number }}</strong></td>
+                  <td>{{ camp.conversions | number }}</td>
+                  <td>
+                    <span class="c-rate">{{ camp.conversionRatePercentage }}%</span>
+                  </td>
+                  <td>
+                    <button (click)="copyLink(camp.trackingSlug)" class="btn-copy">📋 Copy</button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Video Description Template Generator -->
+      <section class="description-template-card">
+        <h3>📝 Pre-formatted YouTube Video Description Template</h3>
+        <p class="section-sub">Copy and paste this into your video upload metadata to funnel traffic effortlessly:</p>
+        <div class="template-box">
+          <pre>{{ videoDescriptionSnippet }}</pre>
+        </div>
+        <button (click)="copySnippet()" class="btn-snippet">📋 Copy Description Snippet</button>
+      </section>
+    </div>
+  `,
+  styles: [`
+    .funnel-page {
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 3rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.75rem;
+    }
+    .header-box h1 {
+      font-size: 1.9rem;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 0 0 0.5rem;
+    }
+    .header-box p {
+      color: #64748b;
+      margin: 0;
+      font-size: 1rem;
+      max-width: 850px;
+      line-height: 1.5;
+    }
+
+    .preset-section h3, .campaigns-section h3 {
+      margin: 0 0 0.3rem;
+      font-size: 1.2rem;
+      color: #0f172a;
+    }
+    .section-sub {
+      margin: 0 0 1rem;
+      color: #64748b;
+      font-size: 0.9rem;
+    }
+    .preset-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1rem;
+    }
+    .preset-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .preset-icon { font-size: 1.75rem; }
+    .preset-details {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+    .preset-details strong { font-size: 0.95rem; color: #1e293b; }
+    .preset-details span { font-size: 0.8rem; color: #64748b; }
+    .btn-preset {
+      background: #eff6ff;
+      color: #2563eb;
+      border: 1px solid #bfdbfe;
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    .btn-preset:hover { background: #dbeafe; }
+
+    .create-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+    .create-card h3 { margin: 0 0 0.8rem; font-size: 1.1rem; color: #1e293b; }
+    .form-row {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .f-input {
+      flex: 1;
+      min-width: 200px;
+      padding: 0.6rem 0.8rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 0.9rem;
+    }
+    .btn-create {
+      background: #059669;
+      color: white;
+      border: none;
+      padding: 0.6rem 1.2rem;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-create:hover { background: #047857; }
+
+    .table-wrap {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      overflow-x: auto;
+    }
+    .funnel-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.9rem;
+    }
+    .funnel-table th {
+      background: #f8fafc;
+      color: #475569;
+      font-weight: 600;
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .funnel-table td {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid #f1f5f9;
+      color: #334155;
+    }
+    .source-tag {
+      background: #f1f5f9;
+      color: #475569;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+    }
+    .dest-link {
+      color: #2563eb;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .slug-code {
+      background: #f1f5f9;
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      color: #0f172a;
+      font-size: 0.8rem;
+    }
+    .c-rate {
+      color: #059669;
+      font-weight: 700;
+    }
+    .btn-copy {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      padding: 0.3rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .btn-copy:hover { background: #e2e8f0; }
+
+    .description-template-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+    .template-box {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin-bottom: 0.85rem;
+    }
+    .template-box pre {
+      margin: 0;
+      font-family: Consolas, monospace;
+      font-size: 0.88rem;
+      line-height: 1.5;
+    }
+    .btn-snippet {
+      background: #2563eb;
+      color: white;
+      border: none;
+      padding: 0.55rem 1.1rem;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-snippet:hover { background: #1d4ed8; }
+  `]
+})
+export class TrafficFunnelComponent implements OnInit {
+  private analytics = inject(AnalyticsService);
+
+  campaigns: FunnelCampaign[] = [];
+  newCampaign: FunnelCampaign = {
+    title: '',
+    sourcePlatform: 'YouTube Description',
+    destinationUrl: 'https://studio.keshavsingh.in',
+    trackingSlug: '',
+    totalClicks: 0,
+    conversions: 0,
+    conversionRatePercentage: 0,
+    isActive: true
+  };
+
+  videoDescriptionSnippet: string = 
+`🚀 Explore Keshav Singh Ecosystem Tools:
+✨ Create 2D/3D Animation Stories with AI: https://studio.keshavsingh.in
+🕉️ Daily Hindu Panchang, Tithi & Cultural Videos: https://panchang.keshavsingh.in
+📊 Creator Analytics & Growth Strategies: https://social.keshavsingh.in
+✍️ Read Technical Guides & Engineering Insights: https://git.keshavsingh.in
+
+🔔 Subscribe for weekly AI, engineering & cultural deep dives!
+#KeshavSingh #AIAnimation #HinduPanchang #WebDev`;
+
+  ngOnInit(): void {
+    this.analytics.getCampaigns().subscribe(c => this.campaigns = c);
+  }
+
+  submitCampaign(): void {
+    if (!this.newCampaign.title || !this.newCampaign.destinationUrl) return;
+    if (!this.newCampaign.trackingSlug) {
+      this.newCampaign.trackingSlug = 'c-' + Math.random().toString(36).substring(2, 7);
+    }
+    this.analytics.createCampaign({ ...this.newCampaign }).subscribe(camp => {
+      this.campaigns.unshift(camp);
+      this.newCampaign = {
+        title: '',
+        sourcePlatform: 'YouTube Description',
+        destinationUrl: 'https://studio.keshavsingh.in',
+        trackingSlug: '',
+        totalClicks: 0,
+        conversions: 0,
+        conversionRatePercentage: 0,
+        isActive: true
+      };
+    });
+  }
+
+  createEcosystemCampaign(title: string, destination: string, slug: string): void {
+    const existing = this.campaigns.find(c => c.trackingSlug === slug);
+    if (!existing) {
+      this.analytics.createCampaign({
+        title,
+        sourcePlatform: 'YouTube / Instagram',
+        destinationUrl: destination,
+        trackingSlug: slug,
+        totalClicks: 120,
+        conversions: 18,
+        conversionRatePercentage: 15.0,
+        isActive: true
+      }).subscribe(c => this.campaigns.unshift(c));
+    }
+  }
+
+  copyLink(slug: string): void {
+    const url = `https://social.keshavsingh.in/t/${slug}`;
+    navigator.clipboard?.writeText(url);
+    alert(`Copied link to clipboard: ${url}`);
+  }
+
+  copySnippet(): void {
+    navigator.clipboard?.writeText(this.videoDescriptionSnippet);
+    alert('Copied YouTube Description Template to clipboard!');
+  }
+}

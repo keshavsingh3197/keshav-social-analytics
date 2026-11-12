@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: social-analytics-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: AllowedOrigins__0
+        value: https://social.keshavsingh.in
+      - key: AllowedOrigins__1
+        value: https://analytics.keshavsingh.in
+      - key: AllowedOrigins__2
+        value: https://admin.keshavsingh.in
+      - key: Jwt__Issuer
+        value: keshavsingh-idp
+      - key: Jwt__Audience
+        value: keshavsingh-apps
+      - key: Jwt__SigningKey
+        sync: false
+    healthCheckPath: /health
