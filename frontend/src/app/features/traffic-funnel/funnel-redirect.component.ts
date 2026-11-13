@@ -11,7 +11,7 @@ import { AnalyticsService } from '../../core/services/analytics.service';
       <div class="redirect-card">
         @if (!error()) {
           <div class="icon">🚀</div>
-          <h1>Redirecting to Keshav Ecosystem…</h1>
+          <h1>Redirecting to Destination…</h1>
           <p>Recording funnel visit for <code>/t/{{ slug() }}</code></p>
         } @else {
           <div class="icon">⚠️</div>

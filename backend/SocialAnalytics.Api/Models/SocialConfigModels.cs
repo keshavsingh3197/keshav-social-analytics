@@ -54,12 +54,88 @@ public class GrowthConfig
 public class SiteConfig
 {
     public string Id { get; set; } = "default";
+    public string BrandName { get; set; } = "SocialPulse";
+    public string BrandSubtitle { get; set; } = "Creator Analytics";
     public string HeroTitle { get; set; } = "Social Channel Performance & Growth Hub";
-    public string HeroSubtitle { get; set; } = "Track multi-platform engagement across YouTube, Instagram, and Facebook. Maximize audience retention, calculate creator earnings, and funnel viewer traffic directly into your monetized ecosystems.";
-    public string YouTubeSnippetHeader { get; set; } = "🚀 Explore Keshav Singh Ecosystem Tools:";
-    public string YouTubeSnippetFooter { get; set; } = "🔔 Subscribe for weekly AI, engineering & cultural deep dives!";
-    public string Hashtags { get; set; } = "#KeshavSingh #AIAnimation #HinduPanchang #WebDev";
-    public string DefaultDestinationBaseUrl { get; set; } = "https://studio.keshavsingh.in";
+    public string HeroSubtitle { get; set; } = "Track live engagement across YouTube, Instagram, and Facebook. Maximize audience retention, calculate creator earnings, and funnel viewer traffic across your connected apps.";
+    public string YouTubeSnippetHeader { get; set; } = "Explore Connected Apps & Resources:";
+    public string YouTubeSnippetFooter { get; set; } = "Subscribe for regular updates & new releases!";
+    public string Hashtags { get; set; } = string.Empty;
+    public string DefaultDestinationBaseUrl { get; set; } = string.Empty;
+    public string EcosystemConfigUrl { get; set; } = "https://id.keshavsingh.in/api/config";
     public string AdminPortalUrl { get; set; } = "https://admin.keshavsingh.in";
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class IntegrationSecrets
+{
+    public string Id { get; set; } = "default";
+    public string? YouTubeApiKey { get; set; }
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class IntegrationSettingsView
+{
+    public bool HasYouTubeApiKey { get; set; }
+    public string? YouTubeApiKeyMasked { get; set; }
+    public string EcosystemConfigUrl { get; set; } = string.Empty;
+    public string AdminPortalUrl { get; set; } = string.Empty;
+    public DateTime UpdatedAt { get; set; }
+}
+
+public class UpdateIntegrationSettingsRequest
+{
+    public string? YouTubeApiKey { get; set; }
+    public bool ClearYouTubeApiKey { get; set; }
+    public string? EcosystemConfigUrl { get; set; }
+    public string? AdminPortalUrl { get; set; }
+}
+
+public class CentralConfigEnvelope
+{
+    public string? SiteTitle { get; set; }
+    public string? BlogUrl { get; set; }
+    public Dictionary<string, string>? Values { get; set; }
+    public List<CentralWebsiteDto>? Websites { get; set; }
+    public List<CentralChannelDto>? Channels { get; set; }
+}
+
+public class CentralWebsiteDto
+{
+    public string Key { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Url { get; set; } = string.Empty;
+    public string? Icon { get; set; }
+    public string? Description { get; set; }
+    public int SortOrder { get; set; }
+    public bool ShowInEcosystemBar { get; set; }
+}
+
+public class CentralChannelDto
+{
+    public string? Id { get; set; }
+    public string Key { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Handle { get; set; } = string.Empty;
+    public string Platform { get; set; } = "YouTube";
+    public string? ChannelId { get; set; }
+    public string Url { get; set; } = string.Empty;
+    public string? Niche { get; set; }
+    public string? Tagline { get; set; }
+    public string? Description { get; set; }
+    public List<string>? Hashtags { get; set; }
+    public bool ShowInAnalytics { get; set; }
+    public bool IsEnabled { get; set; }
+}
+
+public class EcosystemSyncSummary
+{
+    public int ImportedChannels { get; set; }
+    public int UpdatedChannels { get; set; }
+    public int LiveVideosFetched { get; set; }
+    public int FunnelsCreated { get; set; }
+    public int PurgedLegacyRecords { get; set; }
+    public bool UsedYouTubeApiKey { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public DateTime SyncedAt { get; set; } = DateTime.UtcNow;
 }

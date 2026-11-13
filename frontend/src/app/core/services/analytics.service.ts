@@ -9,12 +9,16 @@ import {
   EarningsCalculationRequest,
   EarningsConfig,
   EarningsReport,
+  EcosystemSyncSummary,
   FunnelCampaign,
   GrowthConfig,
   GrowthSuggestion,
+  IntegrationSettingsView,
   PlatformSummary,
+  RecentFeedVideo,
   SiteConfig,
-  SocialPlatform
+  SocialPlatform,
+  UpdateIntegrationSettingsRequest
 } from '../models/analytics.models';
 
 @Injectable({ providedIn: 'root' })
@@ -44,9 +48,15 @@ export class AnalyticsService {
     );
   }
 
+  getRecentVideos(limit = 16): Observable<RecentFeedVideo[]> {
+    return this.http.get<RecentFeedVideo[]>(`${this.api}/analytics/videos?limit=${limit}`).pipe(
+      catchError(() => of([]))
+    );
+  }
+
   getEarningsConfig(): Observable<EarningsConfig> {
     return this.http.get<EarningsConfig>(`${this.api}/earnings/config`).pipe(
-      catchError(() => of(this.fallbackEarningsConfig()))
+      catchError(() => of({ platformBenchmarks: [], niches: [], opportunities: [] }))
     );
   }
 
@@ -56,7 +66,7 @@ export class AnalyticsService {
     );
   }
 
-  auditChannel(handle: string = '@KeshavSingh', platform: SocialPlatform = 'YouTube'): Observable<ChannelAuditResult> {
+  auditChannel(handle: string, platform: SocialPlatform = 'YouTube'): Observable<ChannelAuditResult> {
     return this.http
       .get<ChannelAuditResult>(`${this.api}/recommendations/audit?handle=${encodeURIComponent(handle)}&platform=${platform}`)
       .pipe(catchError(() => of({ channelHandle: handle, healthScoreOutOf100: 0, prioritySuggestions: [], bestUploadTimes: [], highDemandKeywords: [] })));
@@ -69,12 +79,14 @@ export class AnalyticsService {
   getSiteConfig(): Observable<SiteConfig> {
     return this.http.get<SiteConfig>(`${this.api}/siteconfig`).pipe(
       catchError(() => of({
+        brandName: 'SocialPulse',
+        brandSubtitle: 'Creator Analytics',
         heroTitle: 'Social Channel Performance & Growth Hub',
-        heroSubtitle: 'Track multi-platform engagement across YouTube, Instagram, and Facebook. Maximize audience retention, calculate creator earnings, and funnel viewer traffic directly into your monetized ecosystems.',
-        youtubeSnippetHeader: '🚀 Explore Keshav Singh Ecosystem Tools:',
-        youtubeSnippetFooter: '🔔 Subscribe for weekly AI, engineering & cultural deep dives!',
-        hashtags: '#KeshavSingh #AIAnimation #HinduPanchang #WebDev',
-        defaultDestinationBaseUrl: 'https://studio.keshavsingh.in',
+        heroSubtitle: 'Connect channels via Admin Console to stream live video metrics, RPM estimates, and ecosystem traffic funnels.',
+        youtubeSnippetHeader: 'Explore Connected Apps & Resources:',
+        youtubeSnippetFooter: 'Subscribe for regular updates & new releases!',
+        hashtags: '',
+        defaultDestinationBaseUrl: '',
         adminPortalUrl: 'https://admin.keshavsingh.in'
       }))
     );
@@ -101,6 +113,30 @@ export class AnalyticsService {
 
   getAdminStatus(): Observable<AdminStatus> {
     return this.http.get<AdminStatus>(`${this.api}/admin/status`);
+  }
+
+  syncEcosystem(purgeLegacy = true): Observable<EcosystemSyncSummary> {
+    return this.http.post<EcosystemSyncSummary>(`${this.api}/admin/sync/ecosystem?purgeLegacy=${purgeLegacy}`, {});
+  }
+
+  syncAllYouTube(): Observable<EcosystemSyncSummary> {
+    return this.http.post<EcosystemSyncSummary>(`${this.api}/admin/sync/youtube`, {});
+  }
+
+  syncChannelLive(id: string): Observable<ChannelMetrics> {
+    return this.http.post<ChannelMetrics>(`${this.api}/admin/channels/${encodeURIComponent(id)}/sync-live`, {});
+  }
+
+  purgeLegacyDemo(): Observable<{ purgedChannels: number }> {
+    return this.http.post<{ purgedChannels: number }>(`${this.api}/admin/purge-legacy`, {});
+  }
+
+  getIntegrations(): Observable<IntegrationSettingsView> {
+    return this.http.get<IntegrationSettingsView>(`${this.api}/admin/integrations`);
+  }
+
+  saveIntegrations(req: UpdateIntegrationSettingsRequest): Observable<IntegrationSettingsView> {
+    return this.http.put<IntegrationSettingsView>(`${this.api}/admin/integrations`, req);
   }
 
   getAdminChannels(): Observable<ChannelMetrics[]> {
@@ -181,20 +217,6 @@ export class AnalyticsService {
         { streamName: 'Affiliate & Link Conversions', amount: Math.round(affRev), percentageShare: total ? Math.round((affRev / total) * 100) : 0 }
       ],
       monetizationOpportunities: []
-    };
-  }
-
-  private fallbackEarningsConfig(): EarningsConfig {
-    return {
-      platformBenchmarks: [
-        { platform: 'YouTube', icon: '📺', defaultMonthlyViews: 384000, defaultRpmUsd: 3.78, defaultSponsorshipUsd: 500, affiliateConversionRatePercent: 0.6, avgOrderValueUsd: 18, description: 'Long-form YouTube videos' },
-        { platform: 'Instagram', icon: '📸', defaultMonthlyViews: 512000, defaultRpmUsd: 1.66, defaultSponsorshipUsd: 350, affiliateConversionRatePercent: 0.9, avgOrderValueUsd: 15, description: 'Instagram Reels' },
-        { platform: 'Facebook', icon: '📘', defaultMonthlyViews: 180000, defaultRpmUsd: 2.33, defaultSponsorshipUsd: 200, affiliateConversionRatePercent: 0.5, avgOrderValueUsd: 12, description: 'Facebook Videos' }
-      ],
-      niches: [
-        { id: 'n-1', name: 'Tech, AI & Software Engineering', minRpmUsd: 3.5, maxRpmUsd: 9.0, suggestedRpmUsd: 5.2, tip: 'High SaaS advertiser bids.' }
-      ],
-      opportunities: []
     };
   }
 }

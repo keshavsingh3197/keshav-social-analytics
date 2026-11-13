@@ -11,6 +11,7 @@ import {
   FunnelCampaign,
   GrowthConfig,
   GrowthSuggestion,
+  IntegrationSettingsView,
   SiteConfig,
   SocialPlatform
 } from '../../core/models/analytics.models';
@@ -80,16 +81,38 @@ type AdminTab = 'channels' | 'funnels' | 'growth' | 'earnings' | 'site';
 
         <!-- TAB 1: CHANNELS CRUD -->
         @if (activeTab() === 'channels') {
+          <section class="panel sync-panel">
+            <div class="row-between">
+              <div>
+                <h2>⚡ Central Ecosystem &amp; Live YouTube Sync</h2>
+                <p class="muted">
+                  Import analytics channels &amp; websites from Central Admin and fetch live YouTube RSS/API video counts &amp; views.
+                </p>
+              </div>
+              <div class="btn-row">
+                <button (click)="runSyncEcosystem(true)" [disabled]="syncing()" class="btn-primary">
+                  {{ syncing() ? '⏳ Syncing…' : '🔄 Sync Central Channels & YouTube Feeds' }}
+                </button>
+                <button (click)="runRefreshYouTube()" [disabled]="syncing()" class="btn-secondary">
+                  📺 Refresh All YouTube Live
+                </button>
+                <button (click)="runPurgeLegacy()" [disabled]="syncing()" class="btn-sm danger">
+                  🧹 Purge Legacy Demo Rows
+                </button>
+              </div>
+            </div>
+          </section>
+
           <section class="panel">
             <h2>{{ channelForm.id ? 'Edit Channel' : 'Add Social Channel / Page' }}</h2>
             <div class="form-grid">
               <div class="field">
                 <label>Channel Name</label>
-                <input [(ngModel)]="channelForm.channelName" placeholder="Keshav Singh Official" />
+                <input [(ngModel)]="channelForm.channelName" placeholder="Channel display name" />
               </div>
               <div class="field">
                 <label>Handle / Slug</label>
-                <input [(ngModel)]="channelForm.channelHandle" placeholder="@KeshavSingh" />
+                <input [(ngModel)]="channelForm.channelHandle" placeholder="@handle" />
               </div>
               <div class="field">
                 <label>Platform</label>
@@ -140,7 +163,7 @@ type AdminTab = 'channels' | 'funnels' | 'growth' | 'earnings' | 'site';
               </div>
               <div class="field field-wide">
                 <label>Channel URL</label>
-                <input [(ngModel)]="channelForm.channelUrl" placeholder="https://www.youtube.com/@KeshavSingh" />
+                <input [(ngModel)]="channelForm.channelUrl" placeholder="https://www.youtube.com/@handle" />
               </div>
               <div class="field checkbox-field">
                 <label>
@@ -158,9 +181,10 @@ type AdminTab = 'channels' | 'funnels' | 'growth' | 'earnings' | 'site';
                 <thead>
                   <tr>
                     <th>Channel</th>
-                    <th>Platform</th>
+                    <th>Platform / Source</th>
                     <th>Views (30d)</th>
                     <th>Followers</th>
+                    <th>Live Videos</th>
                     <th>Est. Rev</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -170,12 +194,16 @@ type AdminTab = 'channels' | 'funnels' | 'growth' | 'earnings' | 'site';
                   @for (ch of channels(); track ch.id) {
                     <tr>
                       <td><strong>{{ ch.channelName }}</strong><br><small>{{ ch.channelHandle }}</small></td>
-                      <td>{{ ch.platform }}</td>
+                      <td>{{ ch.platform }}<br><small>{{ ch.dataSource || 'Admin' }}</small></td>
                       <td>{{ ch.totalViewsLast30Days | number }}</td>
                       <td>{{ ch.followersOrSubscribers | number }}</td>
+                      <td>{{ ch.recentVideos?.length || ch.videosOrPostsCount }}</td>
                       <td>\${{ ch.estimatedMonthlyRevenue || 0 | number }}</td>
                       <td><span class="pill" [class.inactive]="ch.isActive === false">{{ ch.isActive === false ? 'Hidden' : 'Active' }}</span></td>
                       <td class="act-cell">
+                        @if (ch.platform === 'YouTube') {
+                          <button (click)="syncSingleChannel(ch.id)" class="btn-sm">⚡ Sync</button>
+                        }
                         <button (click)="editChannel(ch)" class="btn-sm">Edit</button>
                         <button (click)="removeChannel(ch.id)" class="btn-sm danger">Delete</button>
                       </td>
@@ -202,11 +230,11 @@ type AdminTab = 'channels' | 'funnels' | 'growth' | 'earnings' | 'site';
               </div>
               <div class="field">
                 <label>Destination URL</label>
-                <input [(ngModel)]="funnelForm.destinationUrl" placeholder="https://studio.keshavsingh.in" />
+                <input [(ngModel)]="funnelForm.destinationUrl" placeholder="https://..." />
               </div>
               <div class="field">
                 <label>Tracking Slug</label>
-                <input [(ngModel)]="funnelForm.trackingSlug" placeholder="yt-animstudio" />
+                <input [(ngModel)]="funnelForm.trackingSlug" placeholder="campaign-slug" />
               </div>
               <div class="field">
                 <label>Total Clicks</label>
@@ -444,20 +472,44 @@ type AdminTab = 'channels' | 'funnels' | 'growth' | 'earnings' | 'site';
             </div>
 
             <hr class="divider" />
-            <h2>Central Global Configuration (Read Live from admin.keshavsingh.in)</h2>
+            <h2>🔑 Live YouTube &amp; Ecosystem Integrations (Admin-Only Secrets)</h2>
             <p class="muted">
-              Global creator identity, ecosystem navigation links, and copyright footer notice are centrally stored in
-              <code>admin</code> so updating them once updates Social Analytics, Hindu Panchang, Studio, and Blog together.
+              Without a YouTube Data API v3 Key, SocialPulse automatically fetches public live videos via official YouTube RSS feeds.
+              Adding a YouTube API Key enables exact total subscriber &amp; engagement-rate sync. Keys are stored server-side and never exposed publicly.
+            </p>
+            <div class="form-grid">
+              <div class="field">
+                <label>Central Config API URL</label>
+                <input [(ngModel)]="integrationsForm.ecosystemConfigUrl" placeholder="https://id.keshavsingh.in/api/config" />
+              </div>
+              <div class="field">
+                <label>YouTube Data API v3 Key {{ integrationsView()?.hasYouTubeApiKey ? '(Saved: ' + integrationsView()?.youTubeApiKeyMasked + ')' : '(Optional)' }}</label>
+                <input type="password" [(ngModel)]="integrationsForm.youTubeApiKey" placeholder="Paste new API key to update…" autocomplete="off" />
+              </div>
+            </div>
+            <div class="btn-row">
+              <button (click)="saveIntegrations(false)" class="btn-primary">🔐 Save Integration Settings</button>
+              @if (integrationsView()?.hasYouTubeApiKey) {
+                <button (click)="saveIntegrations(true)" class="btn-sm danger">Remove Saved Key</button>
+              }
+            </div>
+
+            <hr class="divider" />
+            <h2>Central Global Configuration (Read Live from Central Admin)</h2>
+            <p class="muted">
+              Global creator identity, creator channels, ecosystem navigation links, and copyright footer notice are centrally stored in
+              <code>admin</code> so updating them once updates all apps together.
             </p>
             <div class="global-summary">
-              <div><strong>Creator Name:</strong> {{ ecosystem.creatorName() }}</div>
-              <div><strong>YouTube Channel:</strong> {{ ecosystem.youtubeChannelName() }} ({{ ecosystem.youtubeChannelUrl() }})</div>
-              <div><strong>Footer Copyright:</strong> {{ ecosystem.copyrightNotice() }}</div>
+              <div><strong>Creator Name:</strong> {{ ecosystem.creatorName() || 'Not configured yet' }}</div>
+              <div><strong>Primary YouTube Channel:</strong> {{ ecosystem.youtubeChannelName() || 'None' }} ({{ ecosystem.youtubeChannelUrl() || '—' }})</div>
+              <div><strong>Synced Ecosystem Channels:</strong> {{ ecosystem.channels().length }} channel(s)</div>
+              <div><strong>Footer Copyright:</strong> {{ ecosystem.copyrightNotice() || '—' }}</div>
               <div><strong>Registered Ecosystem Apps:</strong> {{ ecosystem.websites().length }} apps synced</div>
             </div>
             <div class="btn-row">
               <a [href]="ecosystem.adminPortalUrl() + '/website'" target="_blank" rel="noopener" class="btn-primary">
-                Edit Ecosystem Websites in Central Admin →
+                Manage Channels &amp; Websites in Central Admin →
               </a>
             </div>
           </section>
@@ -519,10 +571,14 @@ export class SocialAdminComponent implements OnInit {
   readonly activeTab = signal<AdminTab>('channels');
   readonly status = signal<AdminStatus | null>(null);
   readonly feedback = signal<{ message: string; isError: boolean } | null>(null);
+  readonly syncing = signal(false);
+  readonly integrationsView = signal<IntegrationSettingsView | null>(null);
 
   readonly channels = signal<ChannelMetrics[]>([]);
   readonly funnels = signal<FunnelCampaign[]>([]);
   readonly suggestions = signal<GrowthSuggestion[]>([]);
+
+  integrationsForm = { ecosystemConfigUrl: 'https://id.keshavsingh.in/api/config', youTubeApiKey: '' };
 
   channelForm: ChannelMetrics = this.emptyChannel();
   funnelForm: FunnelCampaign = this.emptyFunnel();
@@ -557,6 +613,10 @@ export class SocialAdminComponent implements OnInit {
     this.analytics.getAdminChannels().subscribe(list => this.channels.set(list));
     this.analytics.getAdminFunnels().subscribe(list => this.funnels.set(list));
     this.analytics.getAdminSuggestions().subscribe(list => this.suggestions.set(list));
+    this.analytics.getIntegrations().subscribe(v => {
+      this.integrationsView.set(v);
+      this.integrationsForm.ecosystemConfigUrl = v.ecosystemConfigUrl || 'https://id.keshavsingh.in/api/config';
+    });
     this.analytics.getGrowthConfig().subscribe(cfg => {
       this.growthConfigForm = cfg;
       this.keywordsCsv = (cfg.highDemandKeywords || []).join(', ');
@@ -572,6 +632,72 @@ export class SocialAdminComponent implements OnInit {
     });
     this.analytics.getSiteConfig().subscribe(cfg => {
       this.siteForm = { ...cfg };
+    });
+  }
+
+  // ---- Central Sync & Integrations ----
+  runSyncEcosystem(purgeLegacy: boolean): void {
+    this.syncing.set(true);
+    this.analytics.syncEcosystem(purgeLegacy).subscribe({
+      next: res => {
+        this.syncing.set(false);
+        this.notify(res.message);
+        this.loadAll();
+      },
+      error: err => {
+        this.syncing.set(false);
+        this.notifyError('Failed to sync ecosystem', err);
+      }
+    });
+  }
+
+  runRefreshYouTube(): void {
+    this.syncing.set(true);
+    this.analytics.syncAllYouTube().subscribe({
+      next: res => {
+        this.syncing.set(false);
+        this.notify(res.message);
+        this.loadAll();
+      },
+      error: err => {
+        this.syncing.set(false);
+        this.notifyError('Failed to refresh YouTube feeds', err);
+      }
+    });
+  }
+
+  syncSingleChannel(id: string): void {
+    this.analytics.syncChannelLive(id).subscribe({
+      next: updated => {
+        this.channels.update(list => list.map(c => c.id === updated.id ? updated : c));
+        this.notify(`Synced live data for ${updated.channelName} (${updated.recentVideos?.length || 0} recent videos).`);
+      },
+      error: err => this.notifyError('Live sync failed', err)
+    });
+  }
+
+  runPurgeLegacy(): void {
+    this.analytics.purgeLegacyDemo().subscribe({
+      next: res => {
+        this.notify(`Removed ${res.purgedChannels} legacy demo channel(s).`);
+        this.analytics.getAdminChannels().subscribe(list => this.channels.set(list));
+      },
+      error: err => this.notifyError('Purge failed', err)
+    });
+  }
+
+  saveIntegrations(clearKey: boolean): void {
+    this.analytics.saveIntegrations({
+      clearYouTubeApiKey: clearKey,
+      youTubeApiKey: clearKey ? '' : this.integrationsForm.youTubeApiKey,
+      ecosystemConfigUrl: this.integrationsForm.ecosystemConfigUrl
+    }).subscribe({
+      next: saved => {
+        this.integrationsView.set(saved);
+        this.integrationsForm.youTubeApiKey = '';
+        this.notify(clearKey ? 'Saved API key removed.' : 'Integration settings saved.');
+      },
+      error: err => this.notifyError('Failed to save integration settings', err)
     });
   }
 
@@ -690,7 +816,7 @@ export class SocialAdminComponent implements OnInit {
       platform: 'All',
       impact: 'High',
       description: '',
-      actionUrl: 'https://keshavsingh.in'
+      actionUrl: this.ecosystem.websites()[0]?.url || ''
     });
   }
   removeOpportunity(index: number): void { this.earningsForm.opportunities.splice(index, 1); }
@@ -730,14 +856,14 @@ export class SocialAdminComponent implements OnInit {
       channelHandle: '',
       platform: 'YouTube' as SocialPlatform,
       niche: 'AI & Dev',
-      followersOrSubscribers: 10000,
-      totalViewsLast30Days: 100000,
-      engagementRatePercentage: 6.0,
-      averageViewDurationMinutes: 4.0,
-      videosOrPostsCount: 50,
-      growthRateMonthlyPercentage: 10.0,
-      rpmUsd: 3.5,
-      estimatedMonthlyRevenue: 350,
+      followersOrSubscribers: 0,
+      totalViewsLast30Days: 0,
+      engagementRatePercentage: 0,
+      averageViewDurationMinutes: 0,
+      videosOrPostsCount: 0,
+      growthRateMonthlyPercentage: 0,
+      rpmUsd: 3.2,
+      estimatedMonthlyRevenue: 0,
       channelUrl: '',
       isActive: true,
       lastUpdated: new Date().toISOString()
@@ -749,7 +875,7 @@ export class SocialAdminComponent implements OnInit {
       id: '',
       title: '',
       sourcePlatform: 'YouTube Description',
-      destinationUrl: 'https://studio.keshavsingh.in',
+      destinationUrl: this.ecosystem.websites()[0]?.url || '',
       trackingSlug: '',
       totalClicks: 0,
       conversions: 0,

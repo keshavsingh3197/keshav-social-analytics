@@ -18,10 +18,22 @@ import {
       <div class="header-box">
         <h1>💰 Creator Earnings & RPM Calculator</h1>
         <p>
-          Simulate revenue potential across YouTube, Instagram, and Facebook. Calculate AdSense RPM, 
-          brand sponsorships, and website referral affiliate earnings based on live configured benchmarks.
+          Simulate revenue potential across connected channels. Calculate AdSense RPM,
+          brand sponsorships, and website referral affiliate earnings using real view metrics or custom targets.
         </p>
       </div>
+
+      @if (channels().length > 0) {
+        <div class="live-preset-bar">
+          <span class="preset-lbl">⚡ Load Live Channel Metrics:</span>
+          @for (ch of channels(); track ch.id) {
+            <button type="button" class="live-ch-btn" (click)="applyChannelPreset(ch)">
+              <span>▶ {{ ch.channelName }}</span>
+              <small>{{ ch.channelHandle }} • {{ ch.totalViewsLast30Days | number }} views</small>
+            </button>
+          }
+        </div>
+      }
 
       <div class="calculator-layout">
         <!-- Controls Panel -->
@@ -355,29 +367,65 @@ import {
       font-size: 0.9rem;
       line-height: 1.6;
     }
+    .live-preset-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      flex-wrap: wrap;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 0.75rem 1rem;
+    }
+    .preset-lbl {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .live-ch-btn {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.1rem;
+      padding: 0.45rem 0.85rem;
+      border-radius: 8px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      cursor: pointer;
+      color: #0f172a;
+      font-weight: 600;
+      font-size: 0.85rem;
+      transition: all 0.15s ease;
+    }
+    .live-ch-btn small { color: #64748b; font-weight: 500; font-size: 0.74rem; }
+    .live-ch-btn:hover { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; }
   `]
 })
 export class EarningsCalculatorComponent implements OnInit {
   private analytics = inject(AnalyticsService);
 
   readonly config = signal<EarningsConfig | null>(null);
+  readonly channels = signal<import('../../core/models/analytics.models').ChannelMetrics[]>([]);
   readonly benchmarks = computed(() => this.config()?.platformBenchmarks ?? []);
   readonly niches = computed(() => this.config()?.niches ?? []);
 
   readonly request = signal<EarningsCalculationRequest>({
     platform: 'YouTube',
-    niche: 'Tech, AI & Software Engineering',
-    monthlyViews: 384000,
-    estimatedRpm: 3.78,
+    niche: '',
+    monthlyViews: 100000,
+    estimatedRpm: 3.0,
     monthlySponsorshipDeals: 1,
-    avgSponsorshipRate: 500,
-    affiliateConversionRatePercentage: 0.6,
-    avgAffiliatePayout: 18
+    avgSponsorshipRate: 250,
+    affiliateConversionRatePercentage: 0.5,
+    avgAffiliatePayout: 15
   });
 
   readonly report = signal<EarningsReport | null>(null);
 
   ngOnInit(): void {
+    this.analytics.getChannels().subscribe(chs => this.channels.set(chs));
     this.analytics.getEarningsConfig().subscribe(cfg => {
       this.config.set(cfg);
       const firstBench = cfg.platformBenchmarks[0];
@@ -396,6 +444,16 @@ export class EarningsCalculatorComponent implements OnInit {
       }
       this.recalculate();
     });
+  }
+
+  applyChannelPreset(ch: import('../../core/models/analytics.models').ChannelMetrics): void {
+    this.request.update(r => ({
+      ...r,
+      platform: ch.platform,
+      monthlyViews: Math.max(ch.totalViewsLast30Days, 1000),
+      estimatedRpm: ch.rpmUsd && ch.rpmUsd > 0 ? ch.rpmUsd : r.estimatedRpm
+    }));
+    this.recalculate();
   }
 
   setPlatform(plat: string): void {

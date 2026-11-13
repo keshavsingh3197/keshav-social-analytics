@@ -2,25 +2,15 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { catchError, of, shareReplay, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { AppConfigEnvelope, EcosystemWebsite } from '../models/analytics.models';
-
-const FALLBACK_WEBSITES: EcosystemWebsite[] = [
-  { key: 'studio', name: 'Studio AI', url: 'https://studio.keshavsingh.in', icon: '🎬', description: 'Generate 2D/3D AI animated stories & YouTube Shorts in minutes.', sortOrder: 10, showInEcosystemBar: true },
-  { key: 'social', name: 'Social Analytics', url: 'https://social.keshavsingh.in', icon: '📊', description: 'Track creator analytics, RPM, growth audits & link funnels.', sortOrder: 20, showInEcosystemBar: true },
-  { key: 'panchang', name: 'Hindu Panchang', url: 'https://panchang.keshavsingh.in', icon: '🕉️', description: 'Daily Vedic Panchang, Choghadiya, festivals & spiritual video feeds.', sortOrder: 30, showInEcosystemBar: true },
-  { key: 'ghar-ledger', name: 'Ghar Ledger', url: 'https://ghar.keshavsingh.in', icon: '💰', description: 'Smart family & personal finance ledger.', sortOrder: 40, showInEcosystemBar: true },
-  { key: 'pratiyogita', name: 'Pratiyogita', url: 'https://pratiyogita.keshavsingh.in', icon: '🏆', description: 'Competitive exam preparation & quizzes.', sortOrder: 50, showInEcosystemBar: true },
-  { key: 'blog', name: 'Content Blog', url: 'https://git.keshavsingh.in', icon: '✍️', description: 'Technical guides, architecture & engineering notes.', sortOrder: 60, showInEcosystemBar: true },
-  { key: 'portfolio', name: 'Portfolio', url: 'https://keshavsingh.in', icon: '🌐', description: 'Keshav Singh — Software Architect & Creator Hub.', sortOrder: 70, showInEcosystemBar: false },
-  { key: 'admin', name: 'Admin & SSO', url: 'https://admin.keshavsingh.in', icon: '🛡️', description: 'Central identity provider & global ecosystem configuration.', sortOrder: 90, showInEcosystemBar: true }
-];
+import { AppConfigEnvelope, CentralChannel, EcosystemWebsite } from '../models/analytics.models';
 
 @Injectable({ providedIn: 'root' })
 export class EcosystemConfigService {
   private http = inject(HttpClient);
   private loadOnce$?: ReturnType<HttpClient['get']>;
 
-  readonly websites = signal<EcosystemWebsite[]>(FALLBACK_WEBSITES);
+  readonly websites = signal<EcosystemWebsite[]>([]);
+  readonly channels = signal<CentralChannel[]>([]);
   readonly values = signal<Record<string, string>>({});
   readonly loadedFromCentral = signal(false);
 
@@ -38,25 +28,34 @@ export class EcosystemConfigService {
 
   readonly footerSites = computed(() =>
     this.websites()
-      .filter(w => ['studio', 'panchang', 'blog', 'admin', 'portfolio'].includes(w.key))
+      .filter(w => w.showInEcosystemBar !== false && w.key !== 'blog-admin')
       .sort((a, b) => a.sortOrder - b.sortOrder)
   );
 
+  readonly footerChannels = computed(() =>
+    this.channels().filter(c => c.isEnabled !== false && c.showInFooter !== false)
+  );
+
+  readonly primaryYouTubeChannel = computed(() =>
+    this.channels().find(c => c.isEnabled !== false && c.platform?.toLowerCase() === 'youtube' && c.isPrimary)
+    ?? this.channels().find(c => c.isEnabled !== false && c.platform?.toLowerCase() === 'youtube')
+    ?? null
+  );
+
   readonly creatorName = computed(() =>
-    this.values()['ecosystem.creatorName'] || 'Keshav Singh'
+    this.values()['ecosystem.creatorName'] || ''
   );
 
   readonly copyrightNotice = computed(() =>
-    this.values()['ecosystem.copyrightNotice'] ||
-    '© 2026 Keshav Singh. Part of the keshavsingh.in ecosystem. All rights reserved.'
+    this.values()['ecosystem.copyrightNotice'] || ''
   );
 
   readonly youtubeChannelName = computed(() =>
-    this.values()['ecosystem.youtubeChannelName'] || 'Keshav Singh Official'
+    this.primaryYouTubeChannel()?.name || this.values()['ecosystem.youtubeChannelName'] || ''
   );
 
   readonly youtubeChannelUrl = computed(() =>
-    this.values()['ecosystem.youtubeChannelUrl'] || 'https://www.youtube.com/@KeshavSingh'
+    this.primaryYouTubeChannel()?.url || this.values()['ecosystem.youtubeChannelUrl'] || ''
   );
 
   readonly featuredPromoText = computed(() =>
@@ -64,7 +63,9 @@ export class EcosystemConfigService {
   );
 
   readonly adminPortalUrl = computed(() =>
-    this.websites().find(w => w.key === 'admin')?.url || 'https://admin.keshavsingh.in'
+    this.websites().find(w => w.key === 'admin')?.url ||
+    this.values()['ecosystem.adminUrl'] ||
+    'https://admin.keshavsingh.in'
   );
 
   load(): void {
@@ -74,6 +75,9 @@ export class EcosystemConfigService {
         tap(envelope => {
           if (envelope.websites?.length) {
             this.websites.set([...envelope.websites].sort((a, b) => a.sortOrder - b.sortOrder));
+          }
+          if (envelope.channels?.length) {
+            this.channels.set([...envelope.channels]);
           }
           if (envelope.values) {
             this.values.set(envelope.values);

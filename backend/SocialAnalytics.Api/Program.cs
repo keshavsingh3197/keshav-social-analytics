@@ -14,12 +14,24 @@ if (!string.IsNullOrWhiteSpace(port))
 }
 
 // Persistence + Dynamic Domain Services
+builder.Services.AddHttpClient("LiveYouTube", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) SocialPulseAnalytics/2.0");
+});
+builder.Services.AddHttpClient("CentralConfig", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
 builder.Services.AddSingleton<HybridDataStore>();
 builder.Services.AddSingleton<SocialConfigService>();
 builder.Services.AddSingleton<FunnelService>();
 builder.Services.AddSingleton<AnalyticsEngineService>();
 builder.Services.AddSingleton<RevenueCalculatorService>();
 builder.Services.AddSingleton<GrowthAdvisorService>();
+builder.Services.AddSingleton<YouTubeLiveFetchService>();
+builder.Services.AddSingleton<CentralEcosystemSyncService>();
+builder.Services.AddHostedService<EcosystemWarmupService>();
 
 builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(

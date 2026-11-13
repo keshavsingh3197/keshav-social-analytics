@@ -7,24 +7,36 @@ import { EcosystemConfigService } from '../../../core/services/ecosystem-config.
   standalone: true,
   imports: [CommonModule],
   template: `
-    <nav class="ecosystem-strip" aria-label="Keshav Singh Ecosystem">
-      <div class="ecosystem-container">
-        <span class="eco-label">Keshav Ecosystem:</span>
-        <div class="eco-links">
-          @for (site of sites(); track site.key) {
-            <a [href]="site.url"
-               [attr.target]="site.key === 'social' ? null : '_blank'"
-               [attr.rel]="site.key === 'social' ? null : 'noopener'"
-               class="eco-link"
-               [class.active]="site.key === 'social'"
-               [class.admin-pill]="site.key === 'admin'">
-              <span>{{ site.icon || '🌐' }}</span>
-              <span>{{ site.name }}</span>
-            </a>
+    @if (sites().length > 0 || channels().length > 0) {
+      <nav class="ecosystem-strip" aria-label="Ecosystem Navigation">
+        <div class="ecosystem-container">
+          <span class="eco-label">{{ ecoLabel() }}</span>
+          <div class="eco-links">
+            @for (site of sites(); track site.key) {
+              <a [href]="site.url"
+                 [attr.target]="site.key === 'social' ? null : '_blank'"
+                 [attr.rel]="site.key === 'social' ? null : 'noopener'"
+                 class="eco-link"
+                 [class.active]="site.key === 'social'"
+                 [class.admin-pill]="site.key === 'admin'">
+                <span>{{ site.icon || '🌐' }}</span>
+                <span>{{ site.name }}</span>
+              </a>
+            }
+          </div>
+          @if (channels().length > 0) {
+            <div class="eco-channels">
+              @for (ch of channels(); track ch.key) {
+                <a [href]="ch.url" target="_blank" rel="noopener" class="eco-channel-pill">
+                  <span>▶️</span>
+                  <span>{{ ch.handle || ch.name }}</span>
+                </a>
+              }
+            </div>
           }
         </div>
-      </div>
-    </nav>
+      </nav>
+    }
   `,
   styles: [`
     .ecosystem-strip {
@@ -82,9 +94,38 @@ import { EcosystemConfigService } from '../../../core/services/ecosystem-config.
       background: #475569;
       color: #f8fafc;
     }
+    .eco-channels {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      flex-wrap: wrap;
+    }
+    .eco-channel-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.14rem 0.5rem;
+      border-radius: 999px;
+      background: rgba(239, 68, 68, 0.14);
+      border: 1px solid rgba(248, 113, 113, 0.35);
+      color: #fca5a5;
+      text-decoration: none;
+      font-size: 0.74rem;
+      font-weight: 600;
+    }
+    .eco-channel-pill:hover {
+      background: rgba(239, 68, 68, 0.28);
+      color: #ffffff;
+    }
   `]
 })
 export class EcosystemBarComponent {
   private ecosystem = inject(EcosystemConfigService);
   readonly sites = this.ecosystem.ecosystemBarSites;
+  readonly channels = this.ecosystem.footerChannels;
+  readonly ecoLabel = () => {
+    const creator = this.ecosystem.creatorName();
+    return creator ? `${creator} Ecosystem:` : 'Ecosystem:';
+  };
 }

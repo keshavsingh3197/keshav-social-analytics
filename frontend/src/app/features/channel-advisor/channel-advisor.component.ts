@@ -36,7 +36,7 @@ import { ChannelAuditResult, ChannelMetrics, SocialPlatform } from '../../core/m
               type="text" 
               [ngModel]="selectedHandle()" 
               (ngModelChange)="selectedHandle.set($event)"
-              placeholder="@KeshavSingh" 
+              placeholder="@channelhandle" 
               class="form-input" />
             <select [ngModel]="selectedPlatform()" (ngModelChange)="selectedPlatform.set($event)" class="form-select">
               <option value="YouTube">YouTube</option>
@@ -327,7 +327,7 @@ export class ChannelAdvisorComponent implements OnInit {
   private analytics = inject(AnalyticsService);
 
   readonly channels = signal<ChannelMetrics[]>([]);
-  readonly selectedHandle = signal('@KeshavSingh');
+  readonly selectedHandle = signal('');
   readonly selectedPlatform = signal<SocialPlatform>('YouTube');
   readonly auditResult = signal<ChannelAuditResult | null>(null);
 
@@ -337,8 +337,8 @@ export class ChannelAdvisorComponent implements OnInit {
       if (list.length > 0) {
         this.selectedHandle.set(list[0].channelHandle);
         this.selectedPlatform.set(list[0].platform);
+        this.runAudit();
       }
-      this.runAudit();
     });
   }
 

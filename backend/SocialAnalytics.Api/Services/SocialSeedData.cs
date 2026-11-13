@@ -2,105 +2,28 @@ using SocialAnalytics.Api.Models;
 
 namespace SocialAnalytics.Api.Services;
 
+/// <summary>
+/// Provides strictly neutral platform/algorithm defaults and zero fake creator metrics,
+/// channels, or click counts. Real channels and ecosystem URLs are synced from central admin
+/// (<see cref="CentralEcosystemSyncService"/>) and YouTube live feeds (<see cref="YouTubeLiveFetchService"/>).
+/// </summary>
 public static class SocialSeedData
 {
-    public static List<ChannelMetrics> DefaultChannels() =>
-    [
-        new()
-        {
-            Id = "ch-1",
-            ChannelName = "Keshav Singh Official",
-            ChannelHandle = "@KeshavSingh",
-            Platform = SocialPlatform.YouTube,
-            Niche = "AI, Animation & Dev",
-            FollowersOrSubscribers = 45200,
-            TotalViewsLast30Days = 384000,
-            EngagementRatePercentage = 7.4,
-            AverageViewDurationMinutes = 4.8,
-            VideosOrPostsCount = 142,
-            GrowthRateMonthlyPercentage = 12.5,
-            RpmUsd = 3.78,
-            EstimatedMonthlyRevenue = 1450,
-            ChannelUrl = "https://www.youtube.com/@KeshavSingh",
-            IsActive = true
-        },
-        new()
-        {
-            Id = "ch-2",
-            ChannelName = "Keshav Dev & Stories",
-            ChannelHandle = "@KeshavStories",
-            Platform = SocialPlatform.Instagram,
-            Niche = "Culture & Short Stories",
-            FollowersOrSubscribers = 28600,
-            TotalViewsLast30Days = 512000,
-            EngagementRatePercentage = 8.9,
-            AverageViewDurationMinutes = 0.9,
-            VideosOrPostsCount = 210,
-            GrowthRateMonthlyPercentage = 18.2,
-            RpmUsd = 1.66,
-            EstimatedMonthlyRevenue = 850,
-            ChannelUrl = "https://www.instagram.com/",
-            IsActive = true
-        },
-        new()
-        {
-            Id = "ch-3",
-            ChannelName = "Keshav Cultural Page",
-            ChannelHandle = "keshav.cultural",
-            Platform = SocialPlatform.Facebook,
-            Niche = "Vedic Panchang & History",
-            FollowersOrSubscribers = 19400,
-            TotalViewsLast30Days = 180000,
-            EngagementRatePercentage = 5.2,
-            AverageViewDurationMinutes = 2.1,
-            VideosOrPostsCount = 88,
-            GrowthRateMonthlyPercentage = 6.4,
-            RpmUsd = 2.33,
-            EstimatedMonthlyRevenue = 420,
-            ChannelUrl = "https://www.facebook.com/",
-            IsActive = true
-        }
-    ];
+    internal static readonly HashSet<string> LegacyDemoHandles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "@KeshavSingh",
+        "@KeshavStories",
+        "keshav.cultural"
+    };
 
-    public static List<FunnelCampaign> DefaultCampaigns() =>
-    [
-        new()
-        {
-            Id = "f-1",
-            Title = "AnimStudio AI Promotion from YouTube",
-            SourcePlatform = "YouTube Description",
-            DestinationUrl = "https://studio.keshavsingh.in",
-            TrackingSlug = "yt-animstudio",
-            TotalClicks = 2840,
-            Conversions = 312,
-            ConversionRatePercentage = 11.0,
-            IsActive = true
-        },
-        new()
-        {
-            Id = "f-2",
-            Title = "Daily Panchang & Rashifal Link from Instagram",
-            SourcePlatform = "Instagram Bio",
-            DestinationUrl = "https://panchang.keshavsingh.in",
-            TrackingSlug = "ig-panchang",
-            TotalClicks = 4920,
-            Conversions = 890,
-            ConversionRatePercentage = 18.1,
-            IsActive = true
-        },
-        new()
-        {
-            Id = "f-3",
-            Title = "Dev Blog Articles Cross-promotion",
-            SourcePlatform = "Facebook Page",
-            DestinationUrl = "https://git.keshavsingh.in",
-            TrackingSlug = "fb-blog",
-            TotalClicks = 1150,
-            Conversions = 140,
-            ConversionRatePercentage = 12.2,
-            IsActive = true
-        }
-    ];
+    internal static readonly HashSet<string> LegacyDemoChannelIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ch-1", "ch-2", "ch-3"
+    };
+
+    public static List<ChannelMetrics> DefaultChannels() => [];
+
+    public static List<FunnelCampaign> DefaultCampaigns() => [];
 
     public static List<GrowthSuggestion> DefaultSuggestions() =>
     [
@@ -111,7 +34,7 @@ public static class SocialSeedData
             Title = "Optimize the First 30 Seconds (The Hook)",
             Description = "Viewers drop off in the initial 25 seconds if the payoff is delayed. Show the outcome first.",
             Impact = SuggestionImpact.High,
-            ActionItem = "Start videos with a direct question or visual demonstration within 5 seconds before intro animations.",
+            ActionItem = "Start videos with a direct visual payoff or hook within 5 seconds before intro animations.",
             EstimatedGain = "+24% Viewer Retention",
             ApplicablePlatform = SocialPlatform.YouTube
         },
@@ -119,10 +42,10 @@ public static class SocialSeedData
         {
             Id = "gs-2",
             Category = "SEO & Title CTR",
-            Title = "Use Curiosity & High-Intent Numbers in Titles",
-            Description = "Titles containing high-contrast comparisons or concrete numbers yield stronger impressions CTR.",
+            Title = "Use Clear Outcome & Search Intent Keywords in Titles",
+            Description = "Titles aligned with high-intent search queries and clear framing yield stronger impressions CTR.",
             Impact = SuggestionImpact.High,
-            ActionItem = "Switch vague titles to outcome-driven titles: e.g. 'How I Built 3 Apps in 24h with AI'.",
+            ActionItem = "Pair strong primary topic keywords in the first 45 characters with high-contrast thumbnail text.",
             EstimatedGain = "+35% Impressions CTR",
             ApplicablePlatform = SocialPlatform.YouTube
         },
@@ -130,10 +53,10 @@ public static class SocialSeedData
         {
             Id = "gs-3",
             Category = "Upload Timing",
-            Title = "Publish During Peak Regional Audience Activity",
-            Description = "Primary viewers peak between 6:30 PM - 9:00 PM IST weekdays and 10:00 AM IST Sundays.",
+            Title = "Publish Ahead of Peak Regional Audience Activity",
+            Description = "Publishing 45 minutes ahead of evening audience spikes improves early notification velocity.",
             Impact = SuggestionImpact.Medium,
-            ActionItem = "Schedule uploads 45 minutes prior to peak traffic (5:45 PM IST) for early indexing.",
+            ActionItem = "Schedule uploads 45 minutes prior to peak regional traffic so search indexing completes before prime time.",
             EstimatedGain = "+18% Initial 2-Hour Velocity",
             ApplicablePlatform = SocialPlatform.Instagram
         },
@@ -141,11 +64,11 @@ public static class SocialSeedData
         {
             Id = "gs-4",
             Category = "Traffic Funneling",
-            Title = "Add Pinned Comment & Description CTA for Ecosystem Sites",
-            Description = "Routing viewers to studio.keshavsingh.in and panchang.keshavsingh.in multiplies session value.",
+            Title = "Add Pinned Comment & Description CTA for Connected Apps",
+            Description = "Routing engaged viewers into your web ecosystem multiplies repeat session value.",
             Impact = SuggestionImpact.High,
             ActionItem = "Place a tracked /t/<slug> funnel link in line 1 of the video description and pinned comment.",
-            EstimatedGain = "+450 Monthly Visits / Video",
+            EstimatedGain = "+3-8% Outbound Session Conversion",
             ApplicablePlatform = SocialPlatform.Facebook
         }
     ];
@@ -159,69 +82,63 @@ public static class SocialSeedData
             {
                 Platform = "YouTube",
                 Icon = "📺",
-                DefaultMonthlyViews = 384000,
-                DefaultRpmUsd = 3.78,
-                DefaultSponsorshipUsd = 500,
-                AffiliateConversionRatePercent = 0.6,
-                AvgOrderValueUsd = 18,
-                Description = "Long-form YouTube videos with mid-roll ads, sponsorships, and pinned CTA funnels."
+                DefaultMonthlyViews = 100000,
+                DefaultRpmUsd = 3.20,
+                DefaultSponsorshipUsd = 250,
+                AffiliateConversionRatePercent = 0.5,
+                AvgOrderValueUsd = 15,
+                Description = "Long-form YouTube videos & Shorts feed ads, sponsorships, and pinned CTA funnels."
             },
             new()
             {
                 Platform = "Instagram",
                 Icon = "📸",
-                DefaultMonthlyViews = 512000,
-                DefaultRpmUsd = 1.66,
-                DefaultSponsorshipUsd = 350,
-                AffiliateConversionRatePercent = 0.9,
+                DefaultMonthlyViews = 100000,
+                DefaultRpmUsd = 1.40,
+                DefaultSponsorshipUsd = 200,
+                AffiliateConversionRatePercent = 0.8,
                 AvgOrderValueUsd = 15,
-                Description = "Reels discovery + bio/story link funnels into Studio AI & Hindu Panchang."
+                Description = "Reels discovery + bio/story link funnels into web portals."
             },
             new()
             {
                 Platform = "Facebook",
                 Icon = "📘",
-                DefaultMonthlyViews = 180000,
-                DefaultRpmUsd = 2.33,
-                DefaultSponsorshipUsd = 200,
-                AffiliateConversionRatePercent = 0.5,
+                DefaultMonthlyViews = 100000,
+                DefaultRpmUsd = 1.90,
+                DefaultSponsorshipUsd = 150,
+                AffiliateConversionRatePercent = 0.4,
                 AvgOrderValueUsd = 12,
-                Description = "In-stream video ads and daily shareable cultural/tech reels."
+                Description = "In-stream video ads and shareable cultural/story reels."
             },
             new()
             {
                 Platform = "LinkedIn",
                 Icon = "💼",
-                DefaultMonthlyViews = 95000,
+                DefaultMonthlyViews = 50000,
                 DefaultRpmUsd = 0.80,
-                DefaultSponsorshipUsd = 650,
-                AffiliateConversionRatePercent = 1.2,
-                AvgOrderValueUsd = 35,
-                Description = "B2B engineering carousels & high-value SaaS/consulting leads."
+                DefaultSponsorshipUsd = 450,
+                AffiliateConversionRatePercent = 1.0,
+                AvgOrderValueUsd = 25,
+                Description = "B2B engineering carousels & high-value product/consulting leads."
             }
         ],
         Niches =
         [
             new() { Id = "n-1", Name = "Tech, AI & Software Engineering", MinRpmUsd = 3.5, MaxRpmUsd = 9.0, SuggestedRpmUsd = 5.2, Tip = "High SaaS & AI tool advertiser bids." },
-            new() { Id = "n-2", Name = "Finance & Investing", MinRpmUsd = 6.0, MaxRpmUsd = 15.0, SuggestedRpmUsd = 8.5, Tip = "Highest AdSense RPM category; pair with GharLedger workflows." },
-            new() { Id = "n-3", Name = "Hindu Panchang & Spirituality", MinRpmUsd = 1.2, MaxRpmUsd = 3.2, SuggestedRpmUsd = 2.1, Tip = "Massive repeat daily traffic; pair with panchang.keshavsingh.in." },
-            new() { Id = "n-4", Name = "2D/3D AI Animation & Storytelling", MinRpmUsd = 2.0, MaxRpmUsd = 5.5, SuggestedRpmUsd = 3.5, Tip = "Strong binge-watch retention and studio.keshavsingh.in funnels." },
-            new() { Id = "n-5", Name = "Competitive Exam Prep (Pratiyogita)", MinRpmUsd = 1.5, MaxRpmUsd = 4.0, SuggestedRpmUsd = 2.6, Tip = "High conversion into test series and study portals." }
+            new() { Id = "n-2", Name = "Personal Finance & Tools", MinRpmUsd = 5.5, MaxRpmUsd = 14.0, SuggestedRpmUsd = 8.0, Tip = "Strong AdSense RPM category; pair with SaaS utility tools." },
+            new() { Id = "n-3", Name = "Devotional, Bhakti & Cultural", MinRpmUsd = 1.2, MaxRpmUsd = 3.2, SuggestedRpmUsd = 2.1, Tip = "High daily repeat viewership and festival spikes." },
+            new() { Id = "n-4", Name = "2D/3D AI Animation & Storytelling", MinRpmUsd = 2.0, MaxRpmUsd = 5.5, SuggestedRpmUsd = 3.5, Tip = "Strong binge-watch retention and creative suite funnels." },
+            new() { Id = "n-5", Name = "Education & Exam Preparation", MinRpmUsd = 1.5, MaxRpmUsd = 4.0, SuggestedRpmUsd = 2.6, Tip = "High conversion into study portals and series." }
         ],
-        Opportunities =
-        [
-            new() { Id = "opp-1", Title = "Cross-Promote Keshav AnimStudio AI", Platform = "YouTube", Impact = "High", Description = "Route AI & animation viewers to studio.keshavsingh.in via description links.", ActionUrl = "https://studio.keshavsingh.in" },
-            new() { Id = "opp-2", Title = "Daily Hindu Panchang Traffic Loop", Platform = "Instagram", Impact = "High", Description = "Convert daily Tithi & Rashifal viewers to recurring panchang.keshavsingh.in sessions.", ActionUrl = "https://panchang.keshavsingh.in" },
-            new() { Id = "opp-3", Title = "Recurring Templates & Memberships", Platform = "YouTube", Impact = "Medium", Description = "Bundle prompt packs, storyboards, and engineering notes for predictable MRR.", ActionUrl = "https://git.keshavsingh.in" },
-            new() { Id = "opp-4", Title = "Multi-Video Sponsor Packages", Platform = "All", Impact = "High", Description = "Negotiate 3-video integration bundles across YouTube + Reels to lift deal rates 25-40%.", ActionUrl = "https://keshavsingh.in" }
-        ]
+        Opportunities = []
     };
 
     public static GrowthConfig DefaultGrowthConfig() => new()
     {
         Id = "default",
-        TargetEngagementPercent = 6.5,
-        TargetAvgWatchMinutes = 5.0,
+        TargetEngagementPercent = 5.5,
+        TargetAvgWatchMinutes = 4.5,
         BestUploadTimes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["YouTube"] = "Tue & Thu 6:30 PM - 8:30 PM IST | Sun 10:00 AM IST",
@@ -232,23 +149,24 @@ public static class SocialSeedData
         HighDemandKeywords =
         [
             "AI animation tools",
-            "Hindu panchang today",
-            "Daily rashifal hindi",
-            "Creator monetization tips",
-            "Full stack .NET Angular",
-            "YouTube earnings CPM"
+            "Daily panchang today",
+            "Devotional 3D story",
+            "Creator monetization RPM"
         ]
     };
 
     public static SiteConfig DefaultSiteConfig() => new()
     {
         Id = "default",
+        BrandName = "SocialPulse",
+        BrandSubtitle = "Creator Analytics",
         HeroTitle = "Social Channel Performance & Growth Hub",
-        HeroSubtitle = "Track multi-platform engagement across YouTube, Instagram, and Facebook. Maximize audience retention, calculate creator earnings, and funnel viewer traffic directly into your monetized ecosystems.",
-        YouTubeSnippetHeader = "🚀 Explore Keshav Singh Ecosystem Tools:",
-        YouTubeSnippetFooter = "🔔 Subscribe for weekly AI, engineering & cultural deep dives!",
-        Hashtags = "#KeshavSingh #AIAnimation #HinduPanchang #WebDev",
-        DefaultDestinationBaseUrl = "https://studio.keshavsingh.in",
+        HeroSubtitle = "Track live engagement across connected channels, inspect real recent video metrics, estimate creator RPM earnings, and route traffic across your ecosystem apps.",
+        YouTubeSnippetHeader = "Explore Connected Apps & Resources:",
+        YouTubeSnippetFooter = "Subscribe for regular updates & new releases!",
+        Hashtags = string.Empty,
+        DefaultDestinationBaseUrl = string.Empty,
+        EcosystemConfigUrl = "https://id.keshavsingh.in/api/config",
         AdminPortalUrl = "https://admin.keshavsingh.in"
     };
 }
