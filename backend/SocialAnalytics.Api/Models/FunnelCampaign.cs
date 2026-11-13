@@ -10,6 +10,8 @@ public class FunnelCampaign
     public long TotalClicks { get; set; }
     public long Conversions { get; set; }
     public double ConversionRatePercentage { get; set; }
+    public string OwnerUserId { get; set; } = string.Empty;
+    public bool IsAdminOwned { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public bool IsActive { get; set; } = true;
 }

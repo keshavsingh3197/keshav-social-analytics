@@ -6,6 +6,7 @@ import {
   AdminStatus,
   ChannelAuditResult,
   ChannelMetrics,
+  ChannelSearchCandidate,
   EarningsCalculationRequest,
   EarningsConfig,
   EarningsReport,
@@ -15,10 +16,15 @@ import {
   GrowthSuggestion,
   IntegrationSettingsView,
   PlatformSummary,
+  PublicChannelAnalysisResult,
+  PublicChannelLookupRequest,
   RecentFeedVideo,
   SiteConfig,
   SocialPlatform,
-  UpdateIntegrationSettingsRequest
+  UpdateIntegrationSettingsRequest,
+  YouTubeOAuthCompleteResponse,
+  YouTubeOAuthConfigPublicView,
+  YouTubeOAuthStatusResponse
 } from '../models/analytics.models';
 
 @Injectable({ providedIn: 'root' })
@@ -27,6 +33,8 @@ export class AnalyticsService {
   private api = environment.apiUrl;
 
   readonly backendOffline = signal(false);
+  readonly activeLookup = signal<PublicChannelAnalysisResult | null>(null);
+  readonly siteConfig = signal<SiteConfig | null>(null);
 
   getChannels(): Observable<ChannelMetrics[]> {
     return this.http.get<ChannelMetrics[]>(`${this.api}/analytics/channels`).pipe(
@@ -78,18 +86,83 @@ export class AnalyticsService {
 
   getSiteConfig(): Observable<SiteConfig> {
     return this.http.get<SiteConfig>(`${this.api}/siteconfig`).pipe(
-      catchError(() => of({
-        brandName: 'SocialPulse',
-        brandSubtitle: 'Creator Analytics',
-        heroTitle: 'Social Channel Performance & Growth Hub',
-        heroSubtitle: 'Connect channels via Admin Console to stream live video metrics, RPM estimates, and ecosystem traffic funnels.',
-        youtubeSnippetHeader: 'Explore Connected Apps & Resources:',
-        youtubeSnippetFooter: 'Subscribe for regular updates & new releases!',
-        hashtags: '',
-        defaultDestinationBaseUrl: '',
-        adminPortalUrl: 'https://admin.keshavsingh.in'
-      }))
+      tap((cfg) => this.siteConfig.set(cfg)),
+      catchError(() => {
+        const fallback: SiteConfig = {
+          brandName: 'SocialPulse',
+          brandSubtitle: 'Creator Analytics',
+          heroTitle: 'Social Channel Performance & Growth Hub',
+          heroSubtitle: 'Search any YouTube or creator handle for live channel analytics, RPM forecasts, and growth intelligence.',
+          youtubeSnippetHeader: 'Explore Connected Apps & Resources:',
+          youtubeSnippetFooter: 'Subscribe for regular updates & new releases!',
+          hashtags: '',
+          defaultDestinationBaseUrl: '',
+          adminPortalUrl: 'https://admin.keshavsingh.in'
+        };
+        this.siteConfig.set(fallback);
+        return of(fallback);
+      })
     );
+  }
+
+  searchChannels(query: string, platform: SocialPlatform = 'YouTube', limit = 6): Observable<ChannelSearchCandidate[]> {
+    const q = query.trim();
+    if (q.length < 2) return of([]);
+    return this.http
+      .get<ChannelSearchCandidate[]>(
+        `${this.api}/analytics/search?q=${encodeURIComponent(q)}&platform=${encodeURIComponent(platform)}&limit=${limit}`
+      )
+      .pipe(catchError(() => of([])));
+  }
+
+  lookupChannel(req: PublicChannelLookupRequest): Observable<PublicChannelAnalysisResult> {
+    return this.http.post<PublicChannelAnalysisResult>(`${this.api}/analytics/lookup`, req).pipe(
+      tap((res) => this.activeLookup.set(res))
+    );
+  }
+
+  autoAddMyChannel(req: PublicChannelLookupRequest): Observable<ChannelMetrics> {
+    return this.http.post<ChannelMetrics>(`${this.api}/analytics/my-channels/auto-add`, req);
+  }
+
+  saveMyChannel(channel: ChannelMetrics): Observable<ChannelMetrics> {
+    return this.http.post<ChannelMetrics>(`${this.api}/analytics/my-channels`, channel);
+  }
+
+  refreshMyChannel(id: string): Observable<ChannelMetrics> {
+    return this.http.post<ChannelMetrics>(`${this.api}/analytics/my-channels/${encodeURIComponent(id)}/refresh`, {});
+  }
+
+  deleteMyChannel(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.api}/analytics/my-channels/${encodeURIComponent(id)}`);
+  }
+
+  getYouTubeOAuthPublicConfig(): Observable<YouTubeOAuthConfigPublicView> {
+    return this.http
+      .get<YouTubeOAuthConfigPublicView>(`${this.api}/integrations/youtube/config`)
+      .pipe(catchError(() => of({ isOAuthConfigured: false, isApiKeyConfigured: false, redirectUriHint: '' })));
+  }
+
+  getYouTubeOAuthStatus(): Observable<YouTubeOAuthStatusResponse> {
+    return this.http
+      .get<YouTubeOAuthStatusResponse>(`${this.api}/integrations/youtube/status`)
+      .pipe(catchError(() => of({ isOAuthConfigured: false, connections: [] })));
+  }
+
+  startYouTubeOAuth(returnPath = '/dashboard'): Observable<{ url: string }> {
+    return this.http.post<{ url: string }>(`${this.api}/integrations/youtube/oauth/start`, { returnPath });
+  }
+
+  completeYouTubeOAuth(code: string, state: string): Observable<YouTubeOAuthCompleteResponse> {
+    return this.http.post<YouTubeOAuthCompleteResponse>(`${this.api}/integrations/youtube/oauth/complete`, { code, state });
+  }
+
+  syncYouTubeConnection(channelId: string): Observable<ChannelMetrics> {
+    return this.http.post<ChannelMetrics>(`${this.api}/integrations/youtube/connections/${encodeURIComponent(channelId)}/sync`, {});
+  }
+
+  disconnectYouTubeConnection(channelId: string): Observable<void> {
+    return this.http.delete<void>(`${this.api}/integrations/youtube/connections/${encodeURIComponent(channelId)}`);
   }
 
   getCampaigns(): Observable<FunnelCampaign[]> {
@@ -100,6 +173,14 @@ export class AnalyticsService {
 
   createCampaign(campaign: FunnelCampaign): Observable<FunnelCampaign> {
     return this.http.post<FunnelCampaign>(`${this.api}/trafficfunnel/campaigns`, campaign);
+  }
+
+  recordUserConversion(id: string): Observable<FunnelCampaign> {
+    return this.http.post<FunnelCampaign>(`${this.api}/trafficfunnel/campaigns/${encodeURIComponent(id)}/convert`, {});
+  }
+
+  deleteUserCampaign(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.api}/trafficfunnel/campaigns/${encodeURIComponent(id)}`);
   }
 
   trackClick(slug: string): Observable<{ success: boolean; destination: string; totalClicks: number }> {

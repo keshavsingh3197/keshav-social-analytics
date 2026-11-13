@@ -2,33 +2,29 @@ import { Component, OnInit, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { EcosystemBarComponent } from './features/shared/ecosystem-bar/ecosystem-bar.component';
 import { HeaderComponent } from './features/shared/header/header.component';
+import { AdSlotComponent } from './features/shared/ad-slot/ad-slot.component';
+import { AnalyticsService } from './core/services/analytics.service';
 import { AuthService } from './core/services/auth.service';
 import { EcosystemConfigService } from './core/services/ecosystem-config.service';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, EcosystemBarComponent, HeaderComponent],
+  imports: [RouterOutlet, EcosystemBarComponent, HeaderComponent, AdSlotComponent],
   template: `
     <app-ecosystem-bar />
     <app-header />
     <main class="main-content">
       <router-outlet />
     </main>
+    <div class="footer-ad-strip">
+      <app-ad-slot placement="footer" />
+    </div>
     <footer class="app-footer">
       <div class="footer-container">
         <div class="footer-col">
-          <strong>{{ creatorName() ? 'SocialPulse by ' + creatorName() : 'SocialPulse Analytics' }}</strong>
-          <p>Live channel intelligence, traffic attribution & algorithmic monetization analytics.</p>
-          @if (footerChannels().length > 0) {
-            <div class="footer-channels">
-              @for (ch of footerChannels(); track ch.key) {
-                <a [href]="ch.url" target="_blank" rel="noopener" class="footer-ch-pill">
-                  ▶ {{ ch.name }} ({{ ch.handle }})
-                </a>
-              }
-            </div>
-          }
+          <strong>{{ siteBrand() }}</strong>
+          <p>Live channel intelligence, creator earnings estimates & traffic conversion analytics.</p>
         </div>
         <div class="footer-links">
           @for (site of footerSites(); track site.key) {
@@ -126,15 +122,16 @@ import { EcosystemConfigService } from './core/services/ecosystem-config.service
 })
 export class AppComponent implements OnInit {
   private auth = inject(AuthService);
+  private analytics = inject(AnalyticsService);
   private ecosystem = inject(EcosystemConfigService);
 
   readonly footerSites = this.ecosystem.footerSites;
-  readonly footerChannels = this.ecosystem.footerChannels;
   readonly copyrightNotice = this.ecosystem.copyrightNotice;
-  readonly creatorName = this.ecosystem.creatorName;
+  readonly siteBrand = () => this.analytics.siteConfig()?.brandName || 'SocialPulse Analytics';
 
   ngOnInit(): void {
     this.ecosystem.load();
     this.auth.ensureInitialized().subscribe();
+    this.analytics.getSiteConfig().subscribe();
   }
 }

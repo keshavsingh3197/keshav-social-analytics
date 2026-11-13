@@ -99,13 +99,22 @@ public class SocialAdminController : ControllerBase
         Ok(await _analyticsService.GetAllChannelsAsync(includeInactive: true));
 
     [HttpPost("channels")]
-    public async Task<ActionResult<ChannelMetrics>> CreateChannel([FromBody] ChannelMetrics channel) =>
-        Ok(await _analyticsService.UpsertChannelAsync(channel));
+    public async Task<ActionResult<ChannelMetrics>> CreateChannel([FromBody] ChannelMetrics channel)
+    {
+        channel.OwnerUserId = string.IsNullOrWhiteSpace(channel.OwnerUserId)
+            ? (User.GetCallerUserId() ?? "admin")
+            : channel.OwnerUserId;
+        channel.IsAdminOwned = true;
+        return Ok(await _analyticsService.UpsertChannelAsync(channel));
+    }
 
     [HttpPut("channels/{id}")]
     public async Task<ActionResult<ChannelMetrics>> UpdateChannel(string id, [FromBody] ChannelMetrics channel)
     {
         channel.Id = id;
+        if (string.IsNullOrWhiteSpace(channel.OwnerUserId))
+            channel.OwnerUserId = User.GetCallerUserId() ?? "admin";
+        channel.IsAdminOwned = true;
         return Ok(await _analyticsService.UpsertChannelAsync(channel));
     }
 
@@ -123,13 +132,21 @@ public class SocialAdminController : ControllerBase
         Ok(await _funnelService.GetCampaignsAsync(activeOnly: false));
 
     [HttpPost("funnels")]
-    public async Task<ActionResult<FunnelCampaign>> CreateFunnel([FromBody] FunnelCampaign campaign) =>
-        Ok(await _funnelService.UpsertCampaignAsync(campaign));
+    public async Task<ActionResult<FunnelCampaign>> CreateFunnel([FromBody] FunnelCampaign campaign)
+    {
+        if (string.IsNullOrWhiteSpace(campaign.OwnerUserId))
+            campaign.OwnerUserId = User.GetCallerUserId() ?? "admin";
+        campaign.IsAdminOwned = true;
+        return Ok(await _funnelService.UpsertCampaignAsync(campaign));
+    }
 
     [HttpPut("funnels/{id}")]
     public async Task<ActionResult<FunnelCampaign>> UpdateFunnel(string id, [FromBody] FunnelCampaign campaign)
     {
         campaign.Id = id;
+        if (string.IsNullOrWhiteSpace(campaign.OwnerUserId))
+            campaign.OwnerUserId = User.GetCallerUserId() ?? "admin";
+        campaign.IsAdminOwned = true;
         return Ok(await _funnelService.UpsertCampaignAsync(campaign));
     }
 

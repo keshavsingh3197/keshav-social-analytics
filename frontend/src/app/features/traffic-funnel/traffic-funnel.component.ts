@@ -5,30 +5,31 @@ import { RouterLink } from '@angular/router';
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { EcosystemConfigService } from '../../core/services/ecosystem-config.service';
 import { AuthService } from '../../core/services/auth.service';
+import { AdSlotComponent } from '../shared/ad-slot/ad-slot.component';
 import { FunnelCampaign, SiteConfig } from '../../core/models/analytics.models';
 
 @Component({
   selector: 'app-traffic-funnel',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, AdSlotComponent],
   template: `
     <div class="funnel-page">
       <div class="header-box">
         <h1>🎯 Traffic Funnel & Link Conversion Engine</h1>
         <p>
-          Convert YouTube video viewers and social traffic into website sessions, SaaS subscribers, 
-          and monetization opportunities. Share trackable referral links directly in your descriptions.
+          Convert video viewers and social visitors into tracked website sessions and conversions.
+          Each signed-in creator manages their own private campaigns and short tracking URLs (<code>/t/...</code>).
         </p>
       </div>
 
-      <!-- Quick Funnel Presets to Ecosystem -->
+      <!-- Quick Funnel Presets -->
       <section class="preset-section">
         <h3>🚀 {{ ecosystemTitle() }}</h3>
         <p class="section-sub">
-          @if (auth.isAdmin()) {
-            Generate or copy trackable referral links across all ecosystem apps:
+          @if (auth.isAuthenticated()) {
+            Generate or copy trackable referral links in your private funnel workspace:
           } @else {
-            Active ecosystem destinations and tracked funnel links:
+            Featured connected destinations (sign in to create your own tracked referral links):
           }
         </p>
 
@@ -44,7 +45,7 @@ import { FunnelCampaign, SiteConfig } from '../../core/models/analytics.models';
                 <button (click)="copyLink(matched.trackingSlug)" class="btn-preset">
                   📋 Copy Link
                 </button>
-              } @else if (auth.isAdmin()) {
+              } @else if (auth.isAuthenticated()) {
                 <button (click)="createEcosystemCampaign(site.name + ' Funnel', site.url, 'yt-' + site.key)" class="btn-preset">
                   Generate Link
                 </button>
@@ -56,10 +57,10 @@ import { FunnelCampaign, SiteConfig } from '../../core/models/analytics.models';
         </div>
       </section>
 
-      <!-- Create Custom Campaign Bar (Admin Only) -->
-      @if (auth.isAdmin()) {
+      <!-- Create Custom Campaign Bar (Authenticated Users - Private per User) -->
+      @if (auth.isAuthenticated()) {
         <section class="create-card">
-          <h3>Create New Tracked Campaign Link (Admin)</h3>
+          <h3>Create New Private Tracked Campaign Link</h3>
           <div class="form-row">
             <input 
               type="text" 
@@ -88,16 +89,16 @@ import { FunnelCampaign, SiteConfig } from '../../core/models/analytics.models';
       } @else {
         <section class="create-card admin-lock-card">
           <div class="lock-row">
-            <span>🔒 Funnel creation & conversion management are restricted to <strong>Admin</strong> accounts.</span>
-            @if (!auth.isAuthenticated()) {
-              <button (click)="auth.loginRedirect()" class="btn-preset">Sign in with SSO</button>
-            }
+            <span>🔐 Sign in with SSO to create your own tracked <code>/t/...</code> funnel links and view your private click/conversion metrics.</span>
+            <button (click)="auth.loginRedirect()" class="btn-preset">Sign in with SSO</button>
           </div>
           @if (statusMessage(); as msg) {
             <div class="status-toast">{{ msg }}</div>
           }
         </section>
       }
+
+      <app-ad-slot placement="infeed" />
 
       <!-- Active Campaigns Table -->
       <section class="campaigns-section">
@@ -138,7 +139,13 @@ import { FunnelCampaign, SiteConfig } from '../../core/models/analytics.models';
                     <span class="c-rate">{{ camp.conversionRatePercentage }}%</span>
                   </td>
                   <td>
-                    <button (click)="copyLink(camp.trackingSlug)" class="btn-copy">📋 Copy</button>
+                    <div class="row-btns">
+                      <button (click)="copyLink(camp.trackingSlug)" class="btn-copy">📋 Copy</button>
+                      @if (auth.isAuthenticated()) {
+                        <button (click)="recordUserConversion(camp)" class="btn-copy conv">+1 Conv</button>
+                        <button (click)="deleteUserCampaign(camp)" class="btn-copy del">Delete</button>
+                      }
+                    </div>
                   </td>
                 </tr>
               }
@@ -368,6 +375,9 @@ import { FunnelCampaign, SiteConfig } from '../../core/models/analytics.models';
     .campaigns-head h3 { margin: 0; }
     .manage-link { color: #2563eb; text-decoration: none; font-weight: 600; font-size: 0.88rem; }
     .slug-link { text-decoration: none; }
+    .row-btns { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .btn-copy.conv { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+    .btn-copy.del { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
   `]
 })
 export class TrafficFunnelComponent implements OnInit {
@@ -384,15 +394,20 @@ export class TrafficFunnelComponent implements OnInit {
   readonly statusMessage = signal<string | null>(null);
 
   readonly ecosystemTitle = computed(() => {
-    const creator = this.ecosystem.creatorName();
-    return creator ? `${creator} Ecosystem Funnels` : 'Connected Ecosystem Funnels';
+    if (this.auth.isAdmin()) {
+      const creator = this.ecosystem.creatorName();
+      return creator ? `${creator} Ecosystem Funnels` : 'Connected Ecosystem Funnels';
+    }
+    return 'Quick Funnel Destinations';
   });
 
   readonly videoDescriptionSnippet = computed(() => {
     const cfg = this.siteConfig();
     const header = cfg?.youtubeSnippetHeader || 'Explore Connected Apps & Resources:';
     const footer = cfg?.youtubeSnippetFooter || 'Subscribe for regular updates & new releases!';
-    const channelHashtags = this.ecosystem.primaryYouTubeChannel()?.hashtags?.map(h => `#${h.replace(/^#+/, '')}`).join(' ') || '';
+    const channelHashtags = this.auth.isAdmin()
+      ? (this.ecosystem.primaryYouTubeChannel()?.hashtags?.map(h => `#${h.replace(/^#+/, '')}`).join(' ') || '')
+      : '';
     const tags = cfg?.hashtags || channelHashtags;
     const lines = this.promoSites().map(site => {
       const camp = this.findCampaignByDestination(site.url);
@@ -487,6 +502,26 @@ export class TrafficFunnelComponent implements OnInit {
     const url = this.trackingUrl(slug);
     navigator.clipboard?.writeText(url);
     this.showStatus(`Copied tracked link: ${url}`);
+  }
+
+  recordUserConversion(camp: FunnelCampaign): void {
+    if (!camp.id) return;
+    this.analytics.recordUserConversion(camp.id).subscribe({
+      next: (updated) => {
+        this.campaigns.update(list => list.map(c => c.id === updated.id ? updated : c));
+        this.showStatus(`Recorded conversion for "${camp.title}"`);
+      }
+    });
+  }
+
+  deleteUserCampaign(camp: FunnelCampaign): void {
+    if (!camp.id) return;
+    this.analytics.deleteUserCampaign(camp.id).subscribe({
+      next: () => {
+        this.campaigns.update(list => list.filter(c => c.id !== camp.id));
+        this.showStatus(`Removed funnel "${camp.title}"`);
+      }
+    });
   }
 
   copySnippet(): void {

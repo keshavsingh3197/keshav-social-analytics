@@ -28,6 +28,10 @@ export const routes: Routes = [
     loadComponent: () => import('./features/traffic-funnel/funnel-redirect.component').then(m => m.FunnelRedirectComponent)
   },
   {
+    path: 'youtube/callback',
+    loadComponent: () => import('./features/youtube-callback/youtube-callback.component').then(m => m.YouTubeCallbackComponent)
+  },
+  {
     path: 'admin',
     canActivate: [adminGuard],
     loadComponent: () => import('./features/admin/social-admin.component').then(m => m.SocialAdminComponent)

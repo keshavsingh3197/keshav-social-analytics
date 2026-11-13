@@ -44,8 +44,7 @@ public sealed class CentralEcosystemSyncService
     {
         var summary = new EcosystemSyncSummary { SyncedAt = DateTime.UtcNow };
         var site = await _configService.GetSiteConfigAsync();
-        var secrets = await _configService.GetSecretsAsync();
-        var apiKey = secrets.YouTubeApiKey;
+        var apiKey = await _configService.GetEffectiveYouTubeApiKeyAsync();
         summary.UsedYouTubeApiKey = !string.IsNullOrWhiteSpace(apiKey);
 
         if (purgeLegacy)
@@ -86,7 +85,9 @@ public sealed class CentralEcosystemSyncService
                 var targetId = $"central-{SlugKey(cc.Key)}";
                 var existing = existingChannels.FirstOrDefault(x =>
                     x.Id.Equals(targetId, StringComparison.OrdinalIgnoreCase) ||
-                    (!string.IsNullOrWhiteSpace(cc.Handle) && x.ChannelHandle.Equals(cc.Handle, StringComparison.OrdinalIgnoreCase)));
+                    ((x.IsAdminOwned || string.IsNullOrWhiteSpace(x.OwnerUserId)) &&
+                     !string.IsNullOrWhiteSpace(cc.Handle) &&
+                     x.ChannelHandle.Equals(cc.Handle, StringComparison.OrdinalIgnoreCase)));
 
                 var channel = existing ?? new ChannelMetrics { Id = targetId, RpmUsd = 3.20 };
                 channel.ChannelName = !string.IsNullOrWhiteSpace(cc.Name) ? cc.Name : channel.ChannelName;
@@ -94,6 +95,8 @@ public sealed class CentralEcosystemSyncService
                 channel.Platform = platform;
                 channel.Niche = !string.IsNullOrWhiteSpace(cc.Niche) ? cc.Niche : channel.Niche;
                 channel.ChannelUrl = !string.IsNullOrWhiteSpace(cc.Url) ? cc.Url : channel.ChannelUrl;
+                channel.OwnerUserId = string.IsNullOrWhiteSpace(channel.OwnerUserId) ? "admin" : channel.OwnerUserId;
+                channel.IsAdminOwned = true;
                 if (!string.IsNullOrWhiteSpace(cc.ChannelId))
                     channel.ExternalChannelId = cc.ChannelId;
                 if (string.IsNullOrWhiteSpace(channel.DataSource) || channel.DataSource == "Admin")
@@ -140,6 +143,8 @@ public sealed class CentralEcosystemSyncService
                         TrackingSlug = $"go-{SlugKey(w.Key)}",
                         TotalClicks = 0,
                         Conversions = 0,
+                        OwnerUserId = "admin",
+                        IsAdminOwned = true,
                         IsActive = true
                     });
                     existingTargets.Add(cleanUrl);
@@ -166,12 +171,13 @@ public sealed class CentralEcosystemSyncService
     public async Task<EcosystemSyncSummary> RefreshAllYouTubeLiveAsync(CancellationToken ct = default)
     {
         var summary = new EcosystemSyncSummary { SyncedAt = DateTime.UtcNow };
-        var secrets = await _configService.GetSecretsAsync();
-        var apiKey = secrets.YouTubeApiKey;
+        var apiKey = await _configService.GetEffectiveYouTubeApiKeyAsync();
         summary.UsedYouTubeApiKey = !string.IsNullOrWhiteSpace(apiKey);
 
         var channels = await _analyticsService.GetAllChannelsAsync(includeInactive: true);
-        foreach (var channel in channels.Where(c => c.Platform == SocialPlatform.YouTube))
+        foreach (var channel in channels.Where(c =>
+            c.Platform == SocialPlatform.YouTube &&
+            (c.IsAdminOwned || string.IsNullOrWhiteSpace(c.OwnerUserId))))
         {
             if (await _youtubeFetch.EnrichChannelAsync(channel, apiKey, ct))
             {

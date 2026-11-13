@@ -2,12 +2,13 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AnalyticsService } from '../../core/services/analytics.service';
+import { AdSlotComponent } from '../shared/ad-slot/ad-slot.component';
 import { ChannelAuditResult, ChannelMetrics, SocialPlatform } from '../../core/models/analytics.models';
 
 @Component({
   selector: 'app-channel-advisor',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, AdSlotComponent],
   template: `
     <div class="advisor-page">
       <div class="header-box">
@@ -119,6 +120,8 @@ import { ChannelAuditResult, ChannelMetrics, SocialPlatform } from '../../core/m
           </div>
         </div>
       }
+
+      <app-ad-slot placement="infeed" />
     </div>
   `,
   styles: [`
@@ -330,11 +333,19 @@ export class ChannelAdvisorComponent implements OnInit {
   readonly selectedHandle = signal('');
   readonly selectedPlatform = signal<SocialPlatform>('YouTube');
   readonly auditResult = signal<ChannelAuditResult | null>(null);
+  readonly auditing = signal(false);
 
   ngOnInit(): void {
+    const active = this.analytics.activeLookup();
+    if (active) {
+      this.selectedHandle.set(active.channel.channelHandle || active.channel.channelName);
+      this.selectedPlatform.set(active.channel.platform);
+      this.auditResult.set(active.audit);
+    }
+
     this.analytics.getChannels().subscribe(list => {
       this.channels.set(list);
-      if (list.length > 0) {
+      if (!active && list.length > 0) {
         this.selectedHandle.set(list[0].channelHandle);
         this.selectedPlatform.set(list[0].platform);
         this.runAudit();
@@ -360,7 +371,30 @@ export class ChannelAdvisorComponent implements OnInit {
   }
 
   runAudit(): void {
-    this.analytics.auditChannel(this.selectedHandle(), this.selectedPlatform())
-      .subscribe(res => this.auditResult.set(res));
+    const handle = this.selectedHandle().trim();
+    const platform = this.selectedPlatform();
+    if (!handle) return;
+
+    this.auditing.set(true);
+    const isSaved = this.channels().some(
+      c => c.channelHandle.toLowerCase() === handle.toLowerCase() && c.platform === platform
+    );
+    if (isSaved) {
+      this.analytics.auditChannel(handle, platform).subscribe({
+        next: (res) => { this.auditResult.set(res); this.auditing.set(false); },
+        error: () => this.auditing.set(false)
+      });
+      return;
+    }
+
+    this.analytics.lookupChannel({ query: handle, platform }).subscribe({
+      next: (res) => { this.auditResult.set(res.audit); this.auditing.set(false); },
+      error: () => {
+        this.analytics.auditChannel(handle, platform).subscribe({
+          next: (res) => { this.auditResult.set(res); this.auditing.set(false); },
+          error: () => this.auditing.set(false)
+        });
+      }
+    });
   }
 }

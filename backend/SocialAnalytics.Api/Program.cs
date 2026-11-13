@@ -23,6 +23,7 @@ builder.Services.AddHttpClient("CentralConfig", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(10);
 });
+builder.Services.AddDataProtection();
 builder.Services.AddSingleton<HybridDataStore>();
 builder.Services.AddSingleton<SocialConfigService>();
 builder.Services.AddSingleton<FunnelService>();
@@ -30,6 +31,8 @@ builder.Services.AddSingleton<AnalyticsEngineService>();
 builder.Services.AddSingleton<RevenueCalculatorService>();
 builder.Services.AddSingleton<GrowthAdvisorService>();
 builder.Services.AddSingleton<YouTubeLiveFetchService>();
+builder.Services.AddSingleton<ChannelLookupService>();
+builder.Services.AddSingleton<YouTubeOAuthService>();
 builder.Services.AddSingleton<CentralEcosystemSyncService>();
 builder.Services.AddHostedService<EcosystemWarmupService>();
 

@@ -37,6 +37,8 @@ export interface ChannelMetrics {
   estimatedMonthlyRevenue?: number;
   channelUrl?: string;
   recentVideos?: RecentVideoItem[];
+  ownerUserId?: string;
+  isAdminOwned?: boolean;
   isActive?: boolean;
   lastUpdated: string;
 }
@@ -108,6 +110,8 @@ export interface FunnelCampaign {
   totalClicks: number;
   conversions: number;
   conversionRatePercentage: number;
+  ownerUserId?: string;
+  isAdminOwned?: boolean;
   createdAt?: string;
   isActive: boolean;
 }
@@ -158,6 +162,22 @@ export interface GrowthConfig {
   updatedAt?: string;
 }
 
+export interface AdMonetizationConfig {
+  adsEnabled: boolean;
+  adSenseClientId: string;
+  headerAdSlotId: string;
+  inFeedAdSlotId: string;
+  sidebarAdSlotId: string;
+  footerAdSlotId: string;
+  adLabel: string;
+  sponsorBannerEnabled: boolean;
+  sponsorBadge: string;
+  sponsorTitle: string;
+  sponsorDescription: string;
+  sponsorCtaText: string;
+  sponsorUrl: string;
+}
+
 export interface SiteConfig {
   id?: string;
   brandName?: string;
@@ -170,12 +190,18 @@ export interface SiteConfig {
   defaultDestinationBaseUrl: string;
   ecosystemConfigUrl?: string;
   adminPortalUrl: string;
+  ads?: AdMonetizationConfig;
   updatedAt?: string;
 }
 
 export interface IntegrationSettingsView {
   hasYouTubeApiKey: boolean;
   youTubeApiKeyMasked?: string | null;
+  hasGoogleClientSecret?: boolean;
+  googleClientSecretMasked?: string | null;
+  googleClientId?: string | null;
+  oAuthRedirectUri?: string | null;
+  isYouTubeOAuthConfigured?: boolean;
   ecosystemConfigUrl: string;
   adminPortalUrl: string;
   updatedAt?: string;
@@ -184,8 +210,68 @@ export interface IntegrationSettingsView {
 export interface UpdateIntegrationSettingsRequest {
   youTubeApiKey?: string;
   clearYouTubeApiKey?: boolean;
+  googleClientId?: string;
+  googleClientSecret?: string;
+  clearGoogleOAuth?: boolean;
+  oAuthRedirectUri?: string;
   ecosystemConfigUrl?: string;
   adminPortalUrl?: string;
+}
+
+export interface ChannelSearchCandidate {
+  externalChannelId: string;
+  channelName: string;
+  channelHandle: string;
+  platform: string;
+  avatarUrl: string;
+  followersOrSubscribers: number;
+  videoCount: number;
+  description: string;
+  channelUrl: string;
+  dataSource: string;
+  isVerified: boolean;
+}
+
+export interface PublicChannelLookupRequest {
+  query: string;
+  platform: string;
+  niche?: string;
+}
+
+export interface PublicChannelAnalysisResult {
+  channel: ChannelMetrics;
+  earnings: EarningsReport;
+  audit: ChannelAuditResult;
+  autoInsights: string[];
+  resolvedLive: boolean;
+  resolutionSummary: string;
+}
+
+export interface YouTubeConnectionView {
+  channelId: string;
+  channelTitle: string;
+  channelHandle?: string | null;
+  avatarUrl?: string | null;
+  connectedAtUtc: string;
+  lastSyncedAtUtc?: string | null;
+  needsReconnect: boolean;
+}
+
+export interface YouTubeOAuthConfigPublicView {
+  isOAuthConfigured: boolean;
+  isApiKeyConfigured: boolean;
+  redirectUriHint: string;
+}
+
+export interface YouTubeOAuthStatusResponse {
+  isOAuthConfigured: boolean;
+  connections: YouTubeConnectionView[];
+}
+
+export interface YouTubeOAuthCompleteResponse {
+  connection: YouTubeConnectionView;
+  channel: ChannelMetrics;
+  returnPath: string;
 }
 
 export interface EcosystemSyncSummary {
