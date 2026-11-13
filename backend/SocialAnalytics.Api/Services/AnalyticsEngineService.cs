@@ -37,6 +37,45 @@ public class AnalyticsEngineService
     public Task<bool> DeleteChannelAsync(string id) =>
         _store.DeleteItemAsync(Collection, id, c => c.Id, SocialSeedData.DefaultChannels);
 
+    public async Task<int> PurgeLegacyDemoChannelsAsync()
+    {
+        var channels = await _store.GetListAsync(Collection, SocialSeedData.DefaultChannels);
+        var remaining = channels
+            .Where(c =>
+                !SocialSeedData.LegacyDemoChannelIds.Contains(c.Id) &&
+                !SocialSeedData.LegacyDemoHandles.Contains(c.ChannelHandle))
+            .ToList();
+
+        var removedCount = channels.Count - remaining.Count;
+        if (removedCount > 0)
+        {
+            await _store.SaveListAsync(Collection, remaining);
+        }
+        return removedCount;
+    }
+
+    public async Task<List<RecentFeedVideo>> GetRecentVideosAsync(int limit = 24)
+    {
+        var channels = await GetAllChannelsAsync(includeInactive: false);
+        return channels
+            .SelectMany(ch => (ch.RecentVideos ?? []).Select(v => new RecentFeedVideo
+            {
+                ChannelId = ch.Id,
+                ChannelName = ch.ChannelName,
+                ChannelHandle = ch.ChannelHandle,
+                VideoId = v.VideoId,
+                Title = v.Title,
+                Url = v.Url,
+                ThumbnailUrl = v.ThumbnailUrl,
+                PublishedAt = v.PublishedAt,
+                Views = v.Views,
+                DescriptionSnippet = v.DescriptionSnippet
+            }))
+            .OrderByDescending(v => v.PublishedAt)
+            .Take(Math.Clamp(limit, 1, 60))
+            .ToList();
+    }
+
     public async Task<List<PlatformSummary>> GetPlatformSummariesAsync()
     {
         var channels = await GetAllChannelsAsync(includeInactive: false);
@@ -76,7 +115,8 @@ public class AnalyticsEngineService
                     TotalAudience = totalAudience,
                     TotalViews = totalViews,
                     AvgEngagement = avgEngagement,
-                    EstimatedEarningsMonthly = Math.Round(totalEarnings, 2)
+                    EstimatedEarningsMonthly = Math.Round(totalEarnings, 2),
+                    ChannelCount = group.Count()
                 };
             })
             .OrderByDescending(s => s.EstimatedEarningsMonthly)

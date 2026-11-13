@@ -17,7 +17,7 @@ public class RecommendationsController : ControllerBase
 
     [HttpGet("audit")]
     public async Task<ActionResult<ChannelAuditResult>> Audit(
-        [FromQuery] string handle = "@KeshavSingh",
+        [FromQuery] string handle = "",
         [FromQuery] SocialPlatform platform = SocialPlatform.YouTube)
     {
         var result = await _advisorService.AuditChannelAsync(handle, platform);

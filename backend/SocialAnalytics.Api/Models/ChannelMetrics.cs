@@ -10,6 +10,31 @@ public enum SocialPlatform
     Twitter
 }
 
+public class RecentVideoItem
+{
+    public string VideoId { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Url { get; set; } = string.Empty;
+    public string ThumbnailUrl { get; set; } = string.Empty;
+    public DateTime PublishedAt { get; set; } = DateTime.UtcNow;
+    public long Views { get; set; }
+    public string DescriptionSnippet { get; set; } = string.Empty;
+}
+
+public class RecentFeedVideo
+{
+    public string ChannelId { get; set; } = string.Empty;
+    public string ChannelName { get; set; } = string.Empty;
+    public string ChannelHandle { get; set; } = string.Empty;
+    public string VideoId { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Url { get; set; } = string.Empty;
+    public string ThumbnailUrl { get; set; } = string.Empty;
+    public DateTime PublishedAt { get; set; }
+    public long Views { get; set; }
+    public string DescriptionSnippet { get; set; } = string.Empty;
+}
+
 public class ChannelMetrics
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
@@ -17,6 +42,11 @@ public class ChannelMetrics
     public string ChannelHandle { get; set; } = string.Empty;
     public SocialPlatform Platform { get; set; }
     public string Niche { get; set; } = "General";
+    public string ExternalChannelId { get; set; } = string.Empty;
+    public string AvatarUrl { get; set; } = string.Empty;
+    public string DataSource { get; set; } = "Admin";
+    public bool IsVerifiedLive { get; set; }
+    public DateTime? LastSyncedAt { get; set; }
     public long FollowersOrSubscribers { get; set; }
     public long TotalViewsLast30Days { get; set; }
     public double EngagementRatePercentage { get; set; }
@@ -26,6 +56,7 @@ public class ChannelMetrics
     public double RpmUsd { get; set; } = 3.5;
     public double EstimatedMonthlyRevenue { get; set; }
     public string ChannelUrl { get; set; } = string.Empty;
+    public List<RecentVideoItem> RecentVideos { get; set; } = [];
     public bool IsActive { get; set; } = true;
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
 }
@@ -37,4 +68,5 @@ public class PlatformSummary
     public long TotalViews { get; set; }
     public double AvgEngagement { get; set; }
     public decimal EstimatedEarningsMonthly { get; set; }
+    public int ChannelCount { get; set; }
 }

@@ -14,17 +14,23 @@ public class SocialAdminController : ControllerBase
     private readonly FunnelService _funnelService;
     private readonly GrowthAdvisorService _advisorService;
     private readonly SocialConfigService _configService;
+    private readonly CentralEcosystemSyncService _syncService;
+    private readonly YouTubeLiveFetchService _youtubeFetch;
 
     public SocialAdminController(
         AnalyticsEngineService analyticsService,
         FunnelService funnelService,
         GrowthAdvisorService advisorService,
-        SocialConfigService configService)
+        SocialConfigService configService,
+        CentralEcosystemSyncService syncService,
+        YouTubeLiveFetchService youtubeFetch)
     {
         _analyticsService = analyticsService;
         _funnelService = funnelService;
         _advisorService = advisorService;
         _configService = configService;
+        _syncService = syncService;
+        _youtubeFetch = youtubeFetch;
     }
 
     [HttpGet("status")]
@@ -33,15 +39,58 @@ public class SocialAdminController : ControllerBase
         var channels = await _analyticsService.GetAllChannelsAsync(includeInactive: true);
         var funnels = await _funnelService.GetCampaignsAsync(activeOnly: false);
         var suggestions = await _advisorService.GetAllSuggestionsAsync();
+        var integrations = await _configService.GetIntegrationSettingsViewAsync();
         return Ok(new
         {
             storageMode = _configService.StorageMode,
             channelCount = channels.Count,
+            verifiedLiveChannels = channels.Count(c => c.IsVerifiedLive),
+            recentVideoCount = channels.Sum(c => c.RecentVideos?.Count ?? 0),
             funnelCount = funnels.Count,
             suggestionCount = suggestions.Count,
+            hasYouTubeApiKey = integrations.HasYouTubeApiKey,
             adminUser = User.FindFirst("email")?.Value ?? User.Identity?.Name ?? "Admin"
         });
     }
+
+    // ---- Central Ecosystem & Live YouTube Sync (Admin Only) ----
+
+    [HttpPost("sync/ecosystem")]
+    public async Task<ActionResult<EcosystemSyncSummary>> SyncEcosystem([FromQuery] bool purgeLegacy = true, CancellationToken ct = default) =>
+        Ok(await _syncService.SyncAllAsync(purgeLegacy, ct));
+
+    [HttpPost("sync/youtube")]
+    public async Task<ActionResult<EcosystemSyncSummary>> SyncAllYouTube(CancellationToken ct = default) =>
+        Ok(await _syncService.RefreshAllYouTubeLiveAsync(ct));
+
+    [HttpPost("channels/{id}/sync-live")]
+    public async Task<ActionResult<ChannelMetrics>> SyncSingleChannelLive(string id, CancellationToken ct = default)
+    {
+        var channels = await _analyticsService.GetAllChannelsAsync(includeInactive: true);
+        var target = channels.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        if (target is null) return NotFound();
+
+        var secrets = await _configService.GetSecretsAsync();
+        await _youtubeFetch.EnrichChannelAsync(target, secrets.YouTubeApiKey, ct);
+        return Ok(await _analyticsService.UpsertChannelAsync(target));
+    }
+
+    [HttpPost("purge-legacy")]
+    public async Task<IActionResult> PurgeLegacyData()
+    {
+        var removed = await _analyticsService.PurgeLegacyDemoChannelsAsync();
+        return Ok(new { purgedChannels = removed });
+    }
+
+    // ---- Integrations & API Keys (Admin Only; secrets masked on read) ----
+
+    [HttpGet("integrations")]
+    public async Task<ActionResult<IntegrationSettingsView>> GetIntegrations() =>
+        Ok(await _configService.GetIntegrationSettingsViewAsync());
+
+    [HttpPut("integrations")]
+    public async Task<ActionResult<IntegrationSettingsView>> SaveIntegrations([FromBody] UpdateIntegrationSettingsRequest request) =>
+        Ok(await _configService.UpdateIntegrationSettingsAsync(request));
 
     // ---- Channels CRUD ----
 

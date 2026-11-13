@@ -1,11 +1,32 @@
 export type SocialPlatform = 'YouTube' | 'Instagram' | 'Facebook' | 'TikTok' | 'LinkedIn' | 'Twitter';
 
+export interface RecentVideoItem {
+  videoId: string;
+  title: string;
+  url: string;
+  thumbnailUrl: string;
+  publishedAt: string;
+  views: number;
+  descriptionSnippet?: string;
+}
+
+export interface RecentFeedVideo extends RecentVideoItem {
+  channelId: string;
+  channelName: string;
+  channelHandle: string;
+}
+
 export interface ChannelMetrics {
   id: string;
   channelName: string;
   channelHandle: string;
   platform: SocialPlatform;
   niche: string;
+  externalChannelId?: string;
+  avatarUrl?: string;
+  dataSource?: string;
+  isVerifiedLive?: boolean;
+  lastSyncedAt?: string;
   followersOrSubscribers: number;
   totalViewsLast30Days: number;
   engagementRatePercentage: number;
@@ -15,6 +36,7 @@ export interface ChannelMetrics {
   rpmUsd?: number;
   estimatedMonthlyRevenue?: number;
   channelUrl?: string;
+  recentVideos?: RecentVideoItem[];
   isActive?: boolean;
   lastUpdated: string;
 }
@@ -25,6 +47,7 @@ export interface PlatformSummary {
   totalViews: number;
   avgEngagement: number;
   estimatedEarningsMonthly: number;
+  channelCount?: number;
 }
 
 export interface EarningsCalculationRequest {
@@ -137,22 +160,72 @@ export interface GrowthConfig {
 
 export interface SiteConfig {
   id?: string;
+  brandName?: string;
+  brandSubtitle?: string;
   heroTitle: string;
   heroSubtitle: string;
   youtubeSnippetHeader: string;
   youtubeSnippetFooter: string;
   hashtags: string;
   defaultDestinationBaseUrl: string;
+  ecosystemConfigUrl?: string;
   adminPortalUrl: string;
   updatedAt?: string;
+}
+
+export interface IntegrationSettingsView {
+  hasYouTubeApiKey: boolean;
+  youTubeApiKeyMasked?: string | null;
+  ecosystemConfigUrl: string;
+  adminPortalUrl: string;
+  updatedAt?: string;
+}
+
+export interface UpdateIntegrationSettingsRequest {
+  youTubeApiKey?: string;
+  clearYouTubeApiKey?: boolean;
+  ecosystemConfigUrl?: string;
+  adminPortalUrl?: string;
+}
+
+export interface EcosystemSyncSummary {
+  importedChannels: number;
+  updatedChannels: number;
+  liveVideosFetched: number;
+  funnelsCreated: number;
+  purgedLegacyRecords: number;
+  usedYouTubeApiKey: boolean;
+  message: string;
+  syncedAt: string;
 }
 
 export interface AdminStatus {
   storageMode: string;
   channelCount: number;
+  verifiedLiveChannels?: number;
+  recentVideoCount?: number;
   funnelCount: number;
   suggestionCount: number;
+  hasYouTubeApiKey?: boolean;
   adminUser: string;
+}
+
+export interface CentralChannel {
+  id?: string;
+  key: string;
+  name: string;
+  handle: string;
+  platform: string;
+  channelId?: string;
+  url: string;
+  niche?: string;
+  tagline?: string;
+  description?: string;
+  hashtags?: string[];
+  showInAnalytics?: boolean;
+  showInFooter?: boolean;
+  isPrimary?: boolean;
+  isEnabled?: boolean;
 }
 
 export interface EcosystemWebsite {
@@ -174,4 +247,5 @@ export interface AppConfigEnvelope {
   defaultLocale?: string;
   values?: Record<string, string>;
   websites?: EcosystemWebsite[];
+  channels?: CentralChannel[];
 }

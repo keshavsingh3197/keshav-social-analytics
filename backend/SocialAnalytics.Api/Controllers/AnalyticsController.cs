@@ -28,4 +28,11 @@ public class AnalyticsController : ControllerBase
         var summaries = await _analyticsService.GetPlatformSummariesAsync();
         return Ok(summaries);
     }
+
+    [HttpGet("videos")]
+    public async Task<ActionResult<List<RecentFeedVideo>>> GetRecentVideos([FromQuery] int limit = 24)
+    {
+        var videos = await _analyticsService.GetRecentVideosAsync(limit);
+        return Ok(videos);
+    }
 }

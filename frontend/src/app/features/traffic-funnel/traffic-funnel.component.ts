@@ -21,9 +21,9 @@ import { FunnelCampaign, SiteConfig } from '../../core/models/analytics.models';
         </p>
       </div>
 
-      <!-- Quick Funnel Presets to Keshav Ecosystem -->
+      <!-- Quick Funnel Presets to Ecosystem -->
       <section class="preset-section">
-        <h3>🚀 Keshav Ecosystem Funnels</h3>
+        <h3>🚀 {{ ecosystemTitle() }}</h3>
         <p class="section-sub">
           @if (auth.isAdmin()) {
             Generate or copy trackable referral links across all ecosystem apps:
@@ -380,20 +380,26 @@ export class TrafficFunnelComponent implements OnInit {
   readonly promoSites = this.ecosystem.promoSiblingSites;
   readonly campaignTitle = signal('');
   readonly campaignSource = signal('YouTube Description');
-  readonly campaignDestination = signal('https://studio.keshavsingh.in');
+  readonly campaignDestination = signal('');
   readonly statusMessage = signal<string | null>(null);
+
+  readonly ecosystemTitle = computed(() => {
+    const creator = this.ecosystem.creatorName();
+    return creator ? `${creator} Ecosystem Funnels` : 'Connected Ecosystem Funnels';
+  });
 
   readonly videoDescriptionSnippet = computed(() => {
     const cfg = this.siteConfig();
-    const header = cfg?.youtubeSnippetHeader || '🚀 Explore Keshav Singh Ecosystem Tools:';
-    const footer = cfg?.youtubeSnippetFooter || '🔔 Subscribe for weekly AI, engineering & cultural deep dives!';
-    const tags = cfg?.hashtags || '#KeshavSingh #AIAnimation #HinduPanchang #WebDev';
+    const header = cfg?.youtubeSnippetHeader || 'Explore Connected Apps & Resources:';
+    const footer = cfg?.youtubeSnippetFooter || 'Subscribe for regular updates & new releases!';
+    const channelHashtags = this.ecosystem.primaryYouTubeChannel()?.hashtags?.map(h => `#${h.replace(/^#+/, '')}`).join(' ') || '';
+    const tags = cfg?.hashtags || channelHashtags;
     const lines = this.promoSites().map(site => {
       const camp = this.findCampaignByDestination(site.url);
       const targetUrl = camp ? this.trackingUrl(camp.trackingSlug) : site.url;
       return `${site.icon || '🔗'} ${site.name}: ${targetUrl}`;
     });
-    return `${header}\n${lines.join('\n')}\n\n${footer}\n${tags}`;
+    return `${header}\n${lines.join('\n')}\n\n${footer}${tags ? '\n' + tags : ''}`;
   });
 
   ngOnInit(): void {
@@ -402,6 +408,8 @@ export class TrafficFunnelComponent implements OnInit {
       this.siteConfig.set(cfg);
       if (cfg?.defaultDestinationBaseUrl) {
         this.campaignDestination.set(cfg.defaultDestinationBaseUrl);
+      } else if (this.promoSites().length > 0) {
+        this.campaignDestination.set(this.promoSites()[0].url);
       }
     });
   }
@@ -440,7 +448,7 @@ export class TrafficFunnelComponent implements OnInit {
         this.campaigns.update(list => [camp, ...list]);
         this.campaignTitle.set('');
         this.campaignSource.set('YouTube Description');
-        this.campaignDestination.set(this.siteConfig()?.defaultDestinationBaseUrl || 'https://studio.keshavsingh.in');
+        this.campaignDestination.set(this.siteConfig()?.defaultDestinationBaseUrl || this.promoSites()[0]?.url || '');
         this.showStatus(`Created funnel campaign "${camp.title}"`);
       },
       error: (err) => {

@@ -18,12 +18,21 @@ import { EcosystemConfigService } from './core/services/ecosystem-config.service
     <footer class="app-footer">
       <div class="footer-container">
         <div class="footer-col">
-          <strong>SocialPulse by {{ creatorName() }}</strong>
-          <p>Creator analytics, traffic attribution & algorithmic monetization intelligence.</p>
+          <strong>{{ creatorName() ? 'SocialPulse by ' + creatorName() : 'SocialPulse Analytics' }}</strong>
+          <p>Live channel intelligence, traffic attribution & algorithmic monetization analytics.</p>
+          @if (footerChannels().length > 0) {
+            <div class="footer-channels">
+              @for (ch of footerChannels(); track ch.key) {
+                <a [href]="ch.url" target="_blank" rel="noopener" class="footer-ch-pill">
+                  ▶ {{ ch.name }} ({{ ch.handle }})
+                </a>
+              }
+            </div>
+          }
         </div>
         <div class="footer-links">
           @for (site of footerSites(); track site.key) {
-            <a [href]="site.url" target="_blank" rel="noopener">{{ site.name }}</a>
+            <a [href]="site.url" target="_blank" rel="noopener">{{ site.icon || '🌐' }} {{ site.name }}</a>
           }
         </div>
       </div>
@@ -90,6 +99,29 @@ import { EcosystemConfigService } from './core/services/ecosystem-config.service
       color: #64748b;
       text-align: center;
     }
+    .footer-channels {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+    .footer-ch-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.65rem;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 999px;
+      color: #e2e8f0;
+      text-decoration: none;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+    .footer-ch-pill:hover {
+      border-color: #38bdf8;
+      color: #38bdf8;
+    }
   `]
 })
 export class AppComponent implements OnInit {
@@ -97,6 +129,7 @@ export class AppComponent implements OnInit {
   private ecosystem = inject(EcosystemConfigService);
 
   readonly footerSites = this.ecosystem.footerSites;
+  readonly footerChannels = this.ecosystem.footerChannels;
   readonly copyrightNotice = this.ecosystem.copyrightNotice;
   readonly creatorName = this.ecosystem.creatorName;
 

@@ -1,7 +1,8 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
+import { EcosystemConfigService } from '../../../core/services/ecosystem-config.service';
 
 @Component({
   selector: 'app-header',
@@ -12,11 +13,11 @@ import { AuthService } from '../../../core/services/auth.service';
       <div class="header-container">
         <a routerLink="/" class="brand-link">
           <div class="brand-badge">⚡ SocialPulse</div>
-          <span class="brand-sub">Keshav Analytics</span>
+          <span class="brand-sub">{{ brandSubtitle() }}</span>
         </a>
 
         <nav class="nav-links">
-          <a routerLink="/dashboard" routerLinkActive="active-nav">Dashboard</a>
+          <a routerLink="/dashboard" routerLinkActive="active-nav">📊 Dashboard</a>
           <a routerLink="/earnings" routerLinkActive="active-nav">💰 Earnings & RPM</a>
           <a routerLink="/advisor" routerLinkActive="active-nav">🚀 Growth Advisor</a>
           <a routerLink="/funnel" routerLinkActive="active-nav">🎯 Traffic Funnel</a>
@@ -175,16 +176,26 @@ import { AuthService } from '../../../core/services/auth.service';
     .btn-sso-login:hover {
       background: #1d4ed8;
     }
+    @media (max-width: 860px) {
+      .header-container { flex-wrap: wrap; gap: 0.75rem; }
+      .nav-links { order: 3; width: 100%; overflow-x: auto; padding-bottom: 0.25rem; }
+    }
   `]
 })
 export class HeaderComponent {
-  auth = inject(AuthService);
+  readonly auth = inject(AuthService);
+  private ecosystem = inject(EcosystemConfigService);
+
+  readonly brandSubtitle = computed(() => {
+    const creator = this.ecosystem.creatorName();
+    return creator ? `${creator} Analytics` : 'Creator & Social Intelligence';
+  });
 
   login(): void {
     this.auth.loginRedirect();
   }
 
   logout(): void {
-    this.auth.logout().subscribe();
+    this.auth.logout().subscribe({ next: () => location.reload() });
   }
 }
