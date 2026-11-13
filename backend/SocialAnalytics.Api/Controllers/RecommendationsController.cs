@@ -44,7 +44,7 @@ public class RecommendationsController : ControllerBase
         }
 
         var result = await _advisorService.AuditChannelAsync(handle, platform, userId, isAdmin);
-        if (!string.IsNullOrWhiteSpace(handle) && result.HealthScoreOutOf100 == 76.0)
+        if (!string.IsNullOrWhiteSpace(handle) && result.Snapshot is null)
         {
             try
             {

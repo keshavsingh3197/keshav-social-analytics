@@ -447,6 +447,88 @@ public sealed class SocialAnalyticsTests : IDisposable
             oauthSvc.CompleteConnectAsync("user-2", false, "auth-code", state));
     }
 
+    [Theory]
+    [InlineData("""{"header":{"pageHeaderRenderer":{"content":{"pageHeaderViewModel":{"metadata":{"contentMetadataViewModel":{"metadataRows":[{"metadataParts":[{"text":{"content":"1.85K subscribers"}}]}]}}}}}}}""", 1850)]
+    [InlineData("""{"accessibility":{"accessibilityData":{"label":"642 subscribers"}}}""", 642)]
+    [InlineData("""{"subscriberCountText":{"simpleText":"12.4K subscribers"}}""", 12400)]
+    public void ExtractSubscriberCountFromHtml_ParsesModernAndLegacyYouTubeMarkup(string html, long expected)
+    {
+        Assert.Equal(expected, YouTubeLiveFetchService.ExtractSubscriberCountFromHtml(html));
+    }
+
+    [Fact]
+    public void GrowthAdvisor_GeneratesRichPillarsIssuesVideoAuditsAndAiPrompts()
+    {
+        var ch = new ChannelMetrics
+        {
+            ChannelName = "Omkar Shiv Bhakti",
+            ChannelHandle = "@omkarshivbhakti",
+            Platform = SocialPlatform.YouTube,
+            Niche = "Devotional",
+            DataSource = "YouTubeRSS",
+            IsVerifiedLive = true,
+            FollowersOrSubscribers = 0,
+            TotalViewsLast30Days = 3383,
+            EngagementRatePercentage = 4.2,
+            AverageViewDurationMinutes = 1.2,
+            RpmUsd = 2.1,
+            EstimatedMonthlyRevenue = 7.1,
+            RecentVideos =
+            [
+                new RecentVideoItem
+                {
+                    VideoId = "v1",
+                    Title = "Bholenath ji ki kripa | Bholenath status #shorts #whatsappstatus #shiv",
+                    Url = "https://www.youtube.com/shorts/v1",
+                    PublishedAt = DateTime.UtcNow.AddDays(-1),
+                    Views = 1320,
+                    DescriptionSnippet = "Daily mantra"
+                },
+                new RecentVideoItem
+                {
+                    VideoId = "v2",
+                    Title = "Har Har Mahadev status #shorts",
+                    Url = "https://www.youtube.com/shorts/v2",
+                    PublishedAt = DateTime.UtcNow.AddDays(-3),
+                    Views = 65,
+                    DescriptionSnippet = "Short clip"
+                },
+                new RecentVideoItem
+                {
+                    VideoId = "v3",
+                    Title = "Om Namah Shivaya Chant #shorts",
+                    Url = "https://www.youtube.com/shorts/v3",
+                    PublishedAt = DateTime.UtcNow.AddDays(-6),
+                    Views = 410,
+                    DescriptionSnippet = "Short chant"
+                }
+            ]
+        };
+
+        var audit = GrowthAdvisorService.BuildAuditResult(
+            ch,
+            ch.ChannelHandle,
+            SocialPlatform.YouTube,
+            SocialSeedData.DefaultGrowthConfig(),
+            SocialSeedData.DefaultSuggestions(),
+            new SiteConfig { DefaultDestinationBaseUrl = "https://panchang.keshavsingh.in", Hashtags = "#OmNamahShivaya" });
+
+        Assert.NotNull(audit.Snapshot);
+        Assert.Equal(3, audit.Snapshot!.ShortsCount);
+        Assert.Equal(0, audit.Snapshot.LongFormCount);
+        Assert.Equal(5, audit.ScorePillars.Count);
+        Assert.Contains(audit.DetectedIssues, i => i.Id == "issue-zero-subs");
+        Assert.Contains(audit.DetectedIssues, i => i.Id == "issue-no-links");
+        Assert.Contains(audit.DetectedIssues, i => i.Id == "issue-all-shorts");
+        Assert.Contains(audit.DetectedIssues, i => i.Id == "issue-long-titles");
+        Assert.Equal(3, audit.VideoAudits.Count);
+        Assert.Contains(audit.VideoAudits, v => v.PerformanceTag == "Breakout" && v.VideoId == "v1");
+        Assert.Contains(audit.VideoAudits, v => v.PerformanceTag == "Underperforming" && v.VideoId == "v2");
+        Assert.True(audit.PromptTemplates.Count >= 4);
+        Assert.All(audit.PromptTemplates, pt => Assert.Contains("@omkarshivbhakti", pt.PromptText));
+        Assert.Contains("https://panchang.keshavsingh.in", audit.RecommendedDescriptionTemplate);
+    }
+
     private static ClaimsPrincipal MakePrincipal(string userId, string role) =>
         new(new ClaimsIdentity(
         [

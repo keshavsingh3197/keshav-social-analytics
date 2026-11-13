@@ -93,9 +93,90 @@ export interface GrowthSuggestion {
   applicablePlatform: SocialPlatform;
 }
 
+export interface AuditScorePillar {
+  key: string;
+  label: string;
+  score: number;
+  status: 'Strong' | 'Needs Work' | 'Critical' | string;
+  summary: string;
+}
+
+export interface VideoAuditItem {
+  videoId: string;
+  title: string;
+  url: string;
+  thumbnailUrl: string;
+  publishedAt: string;
+  views: number;
+  viewRatioVsAvg: number;
+  titleLength: number;
+  isShort: boolean;
+  hasDescriptionLink: boolean;
+  hasHookOrStructure: boolean;
+  performanceTag: 'Breakout' | 'Solid' | 'Underperforming' | string;
+  diagnosticNote: string;
+  suggestedTitleRewrite: string;
+  fixPrompt: string;
+}
+
+export interface ChannelIssueItem {
+  id: string;
+  severity: 'Critical' | 'Warning' | 'Opportunity' | string;
+  category: string;
+  title: string;
+  evidence: string;
+  impactEstimate: string;
+  fixActionType: string;
+  fixActionLabel: string;
+  fixRoute: string;
+  fixPrompt: string;
+}
+
+export interface AiPromptTemplate {
+  id: string;
+  category: string;
+  title: string;
+  description: string;
+  targetTool: string;
+  promptText: string;
+}
+
+export interface ChannelAuditSnapshot {
+  channelName: string;
+  channelHandle: string;
+  platform: string;
+  niche: string;
+  avatarUrl: string;
+  channelUrl: string;
+  dataSource: string;
+  isVerifiedLive: boolean;
+  followersOrSubscribers: number;
+  totalViewsLast30Days: number;
+  engagementRatePercentage: number;
+  averageViewDurationMinutes: number;
+  videosAnalyzed: number;
+  shortsCount: number;
+  longFormCount: number;
+  avgViewsPerRecentVideo: number;
+  uploadsPerWeek: number;
+  avgTitleLength: number;
+  videosWithDescriptionLinks: number;
+  estimatedRpmUsd: number;
+  estimatedMonthlyRevenue: number;
+}
+
 export interface ChannelAuditResult {
   channelHandle: string;
   healthScoreOutOf100: number;
+  overallGrade?: string;
+  executiveSummary?: string;
+  snapshot?: ChannelAuditSnapshot | null;
+  scorePillars?: AuditScorePillar[];
+  detectedIssues?: ChannelIssueItem[];
+  videoAudits?: VideoAuditItem[];
+  promptTemplates?: AiPromptTemplate[];
+  recommendedDescriptionTemplate?: string;
+  recommendedPinnedComment?: string;
   prioritySuggestions: GrowthSuggestion[];
   bestUploadTimes: string[];
   highDemandKeywords: string[];
