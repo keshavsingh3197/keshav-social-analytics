@@ -55,6 +55,23 @@ public sealed class ChannelLookupService
         if (request.Platform == SocialPlatform.YouTube)
         {
             resolvedLive = await _ytFetch.EnrichChannelAsync(channel, apiKey, ct);
+            if (resolvedLive && channel.FollowersOrSubscribers <= 0)
+            {
+                var subHits = await _ytFetch.SearchChannelsAsync(query, apiKey, SocialPlatform.YouTube, maxResults: 3, ct);
+                var matchedHit = subHits.FirstOrDefault(h =>
+                    (!string.IsNullOrWhiteSpace(channel.ExternalChannelId) && string.Equals(h.ExternalChannelId, channel.ExternalChannelId, StringComparison.OrdinalIgnoreCase)) ||
+                    (!string.IsNullOrWhiteSpace(channel.ChannelHandle) && string.Equals(h.ChannelHandle, channel.ChannelHandle, StringComparison.OrdinalIgnoreCase)))
+                    ?? subHits.FirstOrDefault();
+                if (matchedHit is not null)
+                {
+                    if (matchedHit.FollowersOrSubscribers > 0)
+                        channel.FollowersOrSubscribers = matchedHit.FollowersOrSubscribers;
+                    if (channel.VideosOrPostsCount <= 0 && matchedHit.VideoCount > 0)
+                        channel.VideosOrPostsCount = matchedHit.VideoCount;
+                    if (string.IsNullOrWhiteSpace(channel.AvatarUrl) && !string.IsNullOrWhiteSpace(matchedHit.AvatarUrl))
+                        channel.AvatarUrl = matchedHit.AvatarUrl;
+                }
+            }
             if (!resolvedLive)
             {
                 var hits = await _ytFetch.SearchChannelsAsync(query, apiKey, SocialPlatform.YouTube, maxResults: 1, ct);
@@ -134,7 +151,8 @@ public sealed class ChannelLookupService
             AvgAffiliatePayout = 15m
         });
 
-        var audit = GrowthAdvisorService.BuildAuditResult(channel, channel.ChannelHandle, channel.Platform, growthConfig, allSuggestions);
+        var siteConfig = await _configService.GetSiteConfigAsync();
+        var audit = GrowthAdvisorService.BuildAuditResult(channel, channel.ChannelHandle, channel.Platform, growthConfig, allSuggestions, siteConfig);
         var insights = BuildAutoInsights(channel, resolvedLive);
 
         return new PublicChannelAnalysisResult

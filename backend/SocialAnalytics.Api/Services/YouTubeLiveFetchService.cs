@@ -346,12 +346,8 @@ public sealed partial class YouTubeLiveFetchService
                             channel.ChannelName = WebUtility.HtmlDecode(titleMatch.Groups[1].Value);
                         }
 
-                        var subMatch = SubscriberTextRegex().Match(html);
-                        if (subMatch.Success)
-                        {
-                            var parsedSubs = ParseCompactNumber(subMatch.Groups[1].Value);
-                            if (parsedSubs > 0) channel.FollowersOrSubscribers = parsedSubs;
-                        }
+                        var parsedSubs = ExtractSubscriberCountFromHtml(html);
+                        if (parsedSubs > 0) channel.FollowersOrSubscribers = parsedSubs;
                     }
                 }
             }
@@ -911,8 +907,44 @@ public sealed partial class YouTubeLiveFetchService
     [GeneratedRegex("<meta\\s+property=\"og:title\"\\s+content=\"([^\"]+)\"")]
     private static partial Regex OgTitleRegex();
 
+    internal static long ExtractSubscriberCountFromHtml(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return 0;
+
+        var legacyMatch = SubscriberTextRegex().Match(html);
+        if (legacyMatch.Success)
+        {
+            var parsed = ParseCompactNumber(legacyMatch.Groups[1].Value);
+            if (parsed > 0) return parsed;
+        }
+
+        // Modern YouTube handle pages embed subscriber counts in pageHeaderViewModel / metadataRows
+        // (e.g. "content":"1.24K subscribers" or "185 subscribers").
+        var modernMatch = ModernSubscriberTextRegex().Match(html);
+        if (modernMatch.Success)
+        {
+            var parsed = ParseCompactNumber(modernMatch.Groups[1].Value);
+            if (parsed > 0) return parsed;
+        }
+
+        var accessibilityMatch = AccessibilitySubscriberRegex().Match(html);
+        if (accessibilityMatch.Success)
+        {
+            var parsed = ParseCompactNumber(accessibilityMatch.Groups[1].Value);
+            if (parsed > 0) return parsed;
+        }
+
+        return 0;
+    }
+
     [GeneratedRegex("\"subscriberCountText\"\\s*:\\s*\\{\"simpleText\"\\s*:\\s*\"([^\"]+)\"")]
     private static partial Regex SubscriberTextRegex();
+
+    [GeneratedRegex("\"(?:content|simpleText|text)\"\\s*:\\s*\"([\\d.,]+\\s*[KMB]?\\s+subscribers?)\"", RegexOptions.IgnoreCase)]
+    private static partial Regex ModernSubscriberTextRegex();
+
+    [GeneratedRegex("\"label\"\\s*:\\s*\"([\\d.,]+\\s*[KMB]?\\s+subscribers?)\"", RegexOptions.IgnoreCase)]
+    private static partial Regex AccessibilitySubscriberRegex();
 
     [GeneratedRegex("(\\d+(?:\\.\\d+)?)\\s*([KMB])?", RegexOptions.IgnoreCase)]
     private static partial Regex CompactNumberRegex();

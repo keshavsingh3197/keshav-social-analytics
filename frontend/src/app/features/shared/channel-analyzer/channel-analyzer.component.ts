@@ -107,7 +107,10 @@ import { AuthService } from '../../../core/services/auth.service';
 
             <div class="lookup-actions">
               <a routerLink="/earnings" class="btn-mini primary">💰 Open in Calculator</a>
-              <a routerLink="/advisor" class="btn-mini">🚀 Full Growth Audit</a>
+              <a
+                routerLink="/advisor"
+                [queryParams]="{ handle: res.channel.channelHandle || res.channel.channelName, platform: res.channel.platform }"
+                class="btn-mini">🚀 Full Growth Audit</a>
               @if (auth.isAuthenticated()) {
                 <button type="button" class="btn-mini save" (click)="saveAnalyzedChannel()" [disabled]="savingChannel()">
                   {{ savingChannel() ? 'Saving...' : '+ Save to My Channels' }}
@@ -342,6 +345,7 @@ export class ChannelAnalyzerComponent implements OnInit, OnDestroy {
     const active = this.lookupResult();
     if (!active || !this.auth.isAuthenticated()) return;
     this.savingChannel.set(true);
+    this.lookupError.set('');
     this.analytics.autoAddMyChannel({
       query: active.channel.channelHandle || active.channel.externalChannelId || active.channel.channelName,
       platform: active.channel.platform,
@@ -353,6 +357,13 @@ export class ChannelAnalyzerComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.savingChannel.set(false);
+        if (err?.status === 401) {
+          this.lookupError.set(
+            err?.error?.message ||
+            'Session could not be verified by the API (HTTP 401). Sign out and back in via SSO, or check that Jwt__SigningKey on social-analytics-api matches admin-api.'
+          );
+          return;
+        }
         this.lookupError.set(err?.error?.message || 'Could not save channel to your workspace.');
       }
     });
