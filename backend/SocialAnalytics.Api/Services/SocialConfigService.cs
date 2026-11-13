@@ -11,11 +11,16 @@ public sealed partial class SocialConfigService
 
     private readonly HybridDataStore _store;
     private readonly IConfiguration _configuration;
+    private readonly CentralAdminConfigReader? _centralReader;
 
-    public SocialConfigService(HybridDataStore store, IConfiguration? configuration = null)
+    public SocialConfigService(
+        HybridDataStore store,
+        IConfiguration? configuration = null,
+        CentralAdminConfigReader? centralReader = null)
     {
         _store = store;
         _configuration = configuration ?? new ConfigurationBuilder().Build();
+        _centralReader = centralReader;
     }
 
     public string StorageMode => _store.StorageMode;
@@ -37,15 +42,27 @@ public sealed partial class SocialConfigService
     {
         var site = await _store.GetSingletonAsync(SiteCollection, "default", SocialSeedData.DefaultSiteConfig);
         site.Ads ??= new AdMonetizationConfig();
+
+        if (_centralReader is not null)
+        {
+            var central = await _centralReader.GetSnapshotAsync();
+            if (!string.IsNullOrWhiteSpace(central.AdSenseClientId) &&
+                AdSenseClientRegex().IsMatch(central.AdSenseClientId.Trim()))
+            {
+                site.Ads.AdSenseClientId = central.AdSenseClientId.Trim();
+            }
+        }
+
         return site;
     }
 
-    public Task<SiteConfig> SaveSiteConfigAsync(SiteConfig config)
+    public async Task<SiteConfig> SaveSiteConfigAsync(SiteConfig config)
     {
         config.Id = "default";
         config.UpdatedAt = DateTime.UtcNow;
         config.Ads = SanitizeAdConfig(config.Ads);
-        return _store.SaveSingletonAsync(SiteCollection, "default", config);
+        await _store.SaveSingletonAsync(SiteCollection, "default", config);
+        return await GetSiteConfigAsync();
     }
 
     public Task<IntegrationSecrets> GetSecretsAsync() =>
@@ -53,8 +70,10 @@ public sealed partial class SocialConfigService
 
     public async Task<string?> GetEffectiveYouTubeApiKeyAsync()
     {
+        var central = _centralReader is not null ? await _centralReader.GetSnapshotAsync() : null;
         var secrets = await GetSecretsAsync();
         return FirstNonEmpty(
+            central?.YouTubeApiKey,
             secrets.YouTubeApiKey,
             _configuration["YouTube:ApiKey"],
             _configuration["YouTube:Data:ApiKey"],
@@ -63,8 +82,10 @@ public sealed partial class SocialConfigService
 
     public async Task<(string? ClientId, string? ClientSecret, string? RedirectUri)> GetEffectiveGoogleOAuthAsync()
     {
+        var central = _centralReader is not null ? await _centralReader.GetSnapshotAsync() : null;
         var secrets = await GetSecretsAsync();
         var clientId = FirstNonEmpty(
+            central?.GoogleOAuthClientId,
             secrets.GoogleClientId,
             _configuration["YouTube:OAuth:ClientId"],
             _configuration["YouTube:Publish:ClientId"],
@@ -73,6 +94,7 @@ public sealed partial class SocialConfigService
             Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID"));
 
         var clientSecret = FirstNonEmpty(
+            central?.GoogleOAuthClientSecret,
             secrets.GoogleClientSecret,
             _configuration["YouTube:OAuth:ClientSecret"],
             _configuration["YouTube:Publish:ClientSecret"],
@@ -93,8 +115,15 @@ public sealed partial class SocialConfigService
     {
         var site = await GetSiteConfigAsync();
         var secrets = await GetSecretsAsync();
+        var central = _centralReader is not null ? await _centralReader.GetSnapshotAsync() : null;
         var apiKey = await GetEffectiveYouTubeApiKeyAsync();
         var (clientId, clientSecret, redirectUri) = await GetEffectiveGoogleOAuthAsync();
+
+        var centralYtConfigured = !string.IsNullOrWhiteSpace(central?.YouTubeApiKey);
+        var centralOAuthConfigured = !string.IsNullOrWhiteSpace(central?.GoogleOAuthClientId) &&
+                                     !string.IsNullOrWhiteSpace(central?.GoogleOAuthClientSecret);
+        var centralAdSenseConfigured = !string.IsNullOrWhiteSpace(central?.AdSenseClientId) &&
+                                       AdSenseClientRegex().IsMatch(central.AdSenseClientId.Trim());
 
         return new IntegrationSettingsView
         {
@@ -105,6 +134,11 @@ public sealed partial class SocialConfigService
             GoogleClientId = string.IsNullOrWhiteSpace(clientId) ? null : clientId,
             OAuthRedirectUri = string.IsNullOrWhiteSpace(redirectUri) ? null : redirectUri,
             IsYouTubeOAuthConfigured = !string.IsNullOrWhiteSpace(clientId) && !string.IsNullOrWhiteSpace(clientSecret),
+            ManagedByCentralAdmin = centralYtConfigured || centralOAuthConfigured || centralAdSenseConfigured || (_centralReader?.IsConfigured ?? false),
+            CentralYouTubeApiKeyConfigured = centralYtConfigured,
+            CentralGoogleOAuthConfigured = centralOAuthConfigured,
+            CentralAdSenseConfigured = centralAdSenseConfigured,
+            AdSenseClientId = string.IsNullOrWhiteSpace(site.Ads?.AdSenseClientId) ? null : site.Ads.AdSenseClientId,
             EcosystemConfigUrl = site.EcosystemConfigUrl,
             AdminPortalUrl = site.AdminPortalUrl,
             UpdatedAt = secrets.UpdatedAt > site.UpdatedAt ? secrets.UpdatedAt : site.UpdatedAt
@@ -228,9 +262,9 @@ public sealed partial class SocialConfigService
     {
         if (string.IsNullOrWhiteSpace(key)) return null;
         var clean = key.Trim();
-        return clean.Length <= 8
-            ? "••••••••"
-            : $"{clean[..4]}••••••••{clean[^4..]}";
+        return clean.Length <= 4
+            ? "••••"
+            : $"••••{clean[^4..]}";
     }
 
     [GeneratedRegex(@"^ca-pub-\d{10,20}$", RegexOptions.CultureInvariant)]

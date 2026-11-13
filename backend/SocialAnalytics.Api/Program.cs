@@ -25,6 +25,7 @@ builder.Services.AddHttpClient("CentralConfig", client =>
 });
 builder.Services.AddDataProtection();
 builder.Services.AddSingleton<HybridDataStore>();
+builder.Services.AddSingleton<CentralAdminConfigReader>();
 builder.Services.AddSingleton<SocialConfigService>();
 builder.Services.AddSingleton<FunnelService>();
 builder.Services.AddSingleton<AnalyticsEngineService>();
@@ -109,10 +110,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         {
             OnTokenValidated = context =>
             {
-                // Normalize short "role" claims to ClaimTypes.Role if issued without full schema URI.
+                // Normalize short "role" / "roles" claims to ClaimTypes.Role if issued without full schema URI.
                 if (context.Principal?.Identity is ClaimsIdentity identity)
                 {
-                    var shortRoles = identity.FindAll("role").Select(c => c.Value).ToList();
+                    var shortRoles = identity.FindAll("role")
+                        .Concat(identity.FindAll("roles"))
+                        .Select(c => c.Value)
+                        .Where(v => !string.IsNullOrWhiteSpace(v))
+                        .ToList();
                     foreach (var role in shortRoles)
                     {
                         if (!identity.HasClaim(ClaimTypes.Role, role))

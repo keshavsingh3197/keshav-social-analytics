@@ -202,6 +202,11 @@ export interface IntegrationSettingsView {
   googleClientId?: string | null;
   oAuthRedirectUri?: string | null;
   isYouTubeOAuthConfigured?: boolean;
+  managedByCentralAdmin?: boolean;
+  centralYouTubeApiKeyConfigured?: boolean;
+  centralGoogleOAuthConfigured?: boolean;
+  centralAdSenseConfigured?: boolean;
+  adSenseClientId?: string | null;
   ecosystemConfigUrl: string;
   adminPortalUrl: string;
   updatedAt?: string;

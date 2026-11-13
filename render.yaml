@@ -23,6 +23,16 @@ services:
         sync: false
       - key: Mongo__Database
         value: SocialAnalyticsDb
+      - key: CentralMongo__Enabled
+        value: "true"
+      - key: CentralMongo__ConnectionString
+        sync: false
+      - key: CentralMongo__DatabaseName
+        value: AdminDb
+      - key: Encryption__DataKey
+        sync: false
+      - key: Encryption__DataKeyId
+        value: "1"
       - key: Ecosystem__AdminConfigUrl
         value: https://id.keshavsingh.in/api/config
     healthCheckPath: /health
