@@ -21,6 +21,34 @@ public sealed partial class FunnelService
             .ToList();
     }
 
+    public async Task<List<FunnelCampaign>> GetCampaignsForUserAsync(
+        string? callerUserId,
+        bool isAdmin,
+        bool activeOnly = true)
+    {
+        if (string.IsNullOrWhiteSpace(callerUserId))
+            return [];
+
+        var list = await _store.GetListAsync(Collection, SocialSeedData.DefaultCampaigns);
+        return list
+            .Where(c => (!activeOnly || c.IsActive) && IsOwnedByCaller(c, callerUserId, isAdmin))
+            .OrderByDescending(c => c.CreatedAt)
+            .ToList();
+    }
+
+    public static bool IsOwnedByCaller(FunnelCampaign c, string? callerUserId, bool isAdmin)
+    {
+        if (string.IsNullOrWhiteSpace(callerUserId))
+            return false;
+
+        if (isAdmin)
+            return string.Equals(c.OwnerUserId, callerUserId, StringComparison.Ordinal) ||
+                   c.IsAdminOwned ||
+                   string.IsNullOrWhiteSpace(c.OwnerUserId);
+
+        return !c.IsAdminOwned && string.Equals(c.OwnerUserId, callerUserId, StringComparison.Ordinal);
+    }
+
     public async Task<FunnelCampaign> UpsertCampaignAsync(FunnelCampaign campaign)
     {
         if (string.IsNullOrWhiteSpace(campaign.Id))
@@ -38,6 +66,60 @@ public sealed partial class FunnelService
             campaign.CreatedAt = DateTime.UtcNow;
 
         return await _store.UpsertItemAsync(Collection, campaign.Id, c => c.Id, campaign, SocialSeedData.DefaultCampaigns);
+    }
+
+    public async Task<FunnelCampaign?> UpsertUserCampaignAsync(
+        string callerUserId,
+        bool isAdmin,
+        FunnelCampaign campaign)
+    {
+        if (string.IsNullOrWhiteSpace(callerUserId))
+            return null;
+
+        var list = await _store.GetListAsync(Collection, SocialSeedData.DefaultCampaigns);
+        if (!string.IsNullOrWhiteSpace(campaign.Id))
+        {
+            var existing = list.FirstOrDefault(c => c.Id.Equals(campaign.Id, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null && !IsOwnedByCaller(existing, callerUserId, isAdmin))
+                return null;
+        }
+        else
+        {
+            campaign.Id = $"f-{Guid.NewGuid():N}"[..10];
+        }
+
+        campaign.OwnerUserId = callerUserId;
+        campaign.IsAdminOwned = isAdmin;
+
+        var desiredSlug = Slugify(string.IsNullOrWhiteSpace(campaign.TrackingSlug) ? campaign.Title : campaign.TrackingSlug);
+        var slugTakenByOther = list.Any(c =>
+            !c.Id.Equals(campaign.Id, StringComparison.OrdinalIgnoreCase) &&
+            c.TrackingSlug.Equals(desiredSlug, StringComparison.OrdinalIgnoreCase));
+        if (slugTakenByOther)
+            desiredSlug = $"{desiredSlug}-{Guid.NewGuid():N}"[..Math.Min(desiredSlug.Length + 5, 36)];
+
+        campaign.TrackingSlug = desiredSlug;
+        return await UpsertCampaignAsync(campaign);
+    }
+
+    public async Task<bool> DeleteUserCampaignAsync(string callerUserId, bool isAdmin, string id)
+    {
+        var list = await _store.GetListAsync(Collection, SocialSeedData.DefaultCampaigns);
+        var target = list.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        if (target is null || !IsOwnedByCaller(target, callerUserId, isAdmin))
+            return false;
+        return await DeleteCampaignAsync(target.Id);
+    }
+
+    public async Task<FunnelCampaign?> RecordUserConversionAsync(string callerUserId, bool isAdmin, string idOrSlug)
+    {
+        var list = await _store.GetListAsync(Collection, SocialSeedData.DefaultCampaigns);
+        var target = list.FirstOrDefault(c =>
+            (c.Id.Equals(idOrSlug, StringComparison.OrdinalIgnoreCase) ||
+             c.TrackingSlug.Equals(idOrSlug, StringComparison.OrdinalIgnoreCase)) &&
+            IsOwnedByCaller(c, callerUserId, isAdmin));
+        if (target is null) return null;
+        return await RecordConversionAsync(target.Id);
     }
 
     public Task<bool> DeleteCampaignAsync(string id) =>

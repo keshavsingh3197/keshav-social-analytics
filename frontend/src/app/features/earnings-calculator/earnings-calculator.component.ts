@@ -2,7 +2,9 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AnalyticsService } from '../../core/services/analytics.service';
+import { AdSlotComponent } from '../shared/ad-slot/ad-slot.component';
 import {
+  ChannelMetrics,
   EarningsCalculationRequest,
   EarningsConfig,
   EarningsReport,
@@ -12,20 +14,41 @@ import {
 @Component({
   selector: 'app-earnings-calculator',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, AdSlotComponent],
   template: `
     <div class="calculator-page">
       <div class="header-box">
         <h1>💰 Creator Earnings & RPM Calculator</h1>
         <p>
-          Simulate revenue potential across connected channels. Calculate AdSense RPM,
-          brand sponsorships, and website referral affiliate earnings using real view metrics or custom targets.
+          Simulate revenue potential from real channel view velocity or any &#64;handle. Calculate AdSense RPM,
+          brand sponsorships, and website referral affiliate earnings in seconds.
         </p>
+      </div>
+
+      <div class="handle-autofill-bar">
+        <span class="preset-lbl">🔍 Auto-fill from any &#64;handle or Channel URL:</span>
+        <form class="autofill-form" (ngSubmit)="autoFillFromHandle()">
+          <input
+            type="text"
+            [(ngModel)]="lookupHandle"
+            name="lookupHandle"
+            placeholder="Enter @handle or YouTube URL (e.g. @mkbhd)"
+            class="form-input autofill-input" />
+          <button type="submit" class="btn-autofill" [disabled]="lookingUp() || !lookupHandle.trim()">
+            {{ lookingUp() ? 'Fetching...' : '⚡ Fetch Stats' }}
+          </button>
+        </form>
+        @if (activeChannelLabel()) {
+          <span class="active-chip">Loaded: {{ activeChannelLabel() }}</span>
+        }
+        @if (lookupMsg()) {
+          <span class="lookup-err">{{ lookupMsg() }}</span>
+        }
       </div>
 
       @if (channels().length > 0) {
         <div class="live-preset-bar">
-          <span class="preset-lbl">⚡ Load Live Channel Metrics:</span>
+          <span class="preset-lbl">⚡ Load My Saved Channel Metrics:</span>
           @for (ch of channels(); track ch.id) {
             <button type="button" class="live-ch-btn" (click)="applyChannelPreset(ch)">
               <span>▶ {{ ch.channelName }}</span>
@@ -174,6 +197,8 @@ import {
               </ul>
             </div>
           }
+
+          <app-ad-slot placement="sidebar" />
         </div>
       </div>
     </div>
@@ -401,15 +426,52 @@ import {
     }
     .live-ch-btn small { color: #64748b; font-weight: 500; font-size: 0.74rem; }
     .live-ch-btn:hover { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; }
+    .handle-autofill-bar {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 0.9rem 1.15rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.9rem;
+    }
+    .autofill-form { display: flex; gap: 0.5rem; flex: 1; min-width: 250px; flex-wrap: wrap; }
+    .autofill-input { flex: 1; min-width: 210px; }
+    .btn-autofill {
+      padding: 0.55rem 1rem;
+      border-radius: 8px;
+      background: #0f172a;
+      color: #fff;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .active-chip {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #065f46;
+      background: #ecfdf5;
+      padding: 0.25rem 0.65rem;
+      border-radius: 999px;
+    }
+    .lookup-err { font-size: 0.8rem; color: #b91c1c; font-weight: 600; }
   `]
 })
 export class EarningsCalculatorComponent implements OnInit {
   private analytics = inject(AnalyticsService);
 
   readonly config = signal<EarningsConfig | null>(null);
-  readonly channels = signal<import('../../core/models/analytics.models').ChannelMetrics[]>([]);
+  readonly channels = signal<ChannelMetrics[]>([]);
   readonly benchmarks = computed(() => this.config()?.platformBenchmarks ?? []);
   readonly niches = computed(() => this.config()?.niches ?? []);
+
+  lookupHandle = '';
+  readonly lookingUp = signal(false);
+  readonly activeChannelLabel = signal('');
+  readonly lookupMsg = signal('');
 
   readonly request = signal<EarningsCalculationRequest>({
     platform: 'YouTube',
@@ -428,6 +490,11 @@ export class EarningsCalculatorComponent implements OnInit {
     this.analytics.getChannels().subscribe(chs => this.channels.set(chs));
     this.analytics.getEarningsConfig().subscribe(cfg => {
       this.config.set(cfg);
+      const active = this.analytics.activeLookup();
+      if (active) {
+        this.applyChannelPreset(active.channel);
+        return;
+      }
       const firstBench = cfg.platformBenchmarks[0];
       const firstNiche = cfg.niches[0];
       if (firstBench) {
@@ -446,10 +513,33 @@ export class EarningsCalculatorComponent implements OnInit {
     });
   }
 
-  applyChannelPreset(ch: import('../../core/models/analytics.models').ChannelMetrics): void {
+  autoFillFromHandle(): void {
+    const q = this.lookupHandle.trim();
+    if (!q) return;
+    this.lookingUp.set(true);
+    this.lookupMsg.set('');
+    this.analytics.lookupChannel({
+      query: q,
+      platform: this.request().platform,
+      niche: this.request().niche || undefined
+    }).subscribe({
+      next: (res) => {
+        this.lookingUp.set(false);
+        this.applyChannelPreset(res.channel);
+      },
+      error: (err) => {
+        this.lookingUp.set(false);
+        this.lookupMsg.set(err?.error?.message || 'Unable to fetch channel metrics.');
+      }
+    });
+  }
+
+  applyChannelPreset(ch: ChannelMetrics): void {
+    this.activeChannelLabel.set(`${ch.channelName} (${ch.channelHandle})`);
     this.request.update(r => ({
       ...r,
       platform: ch.platform,
+      niche: ch.niche || r.niche,
       monthlyViews: Math.max(ch.totalViewsLast30Days, 1000),
       estimatedRpm: ch.rpmUsd && ch.rpmUsd > 0 ? ch.rpmUsd : r.estimatedRpm
     }));

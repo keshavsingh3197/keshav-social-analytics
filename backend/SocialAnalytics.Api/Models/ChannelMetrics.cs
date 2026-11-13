@@ -57,8 +57,42 @@ public class ChannelMetrics
     public double EstimatedMonthlyRevenue { get; set; }
     public string ChannelUrl { get; set; } = string.Empty;
     public List<RecentVideoItem> RecentVideos { get; set; } = [];
+    public string OwnerUserId { get; set; } = string.Empty;
+    public bool IsAdminOwned { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
+}
+
+public class ChannelSearchCandidate
+{
+    public string ExternalChannelId { get; set; } = string.Empty;
+    public string ChannelName { get; set; } = string.Empty;
+    public string ChannelHandle { get; set; } = string.Empty;
+    public SocialPlatform Platform { get; set; } = SocialPlatform.YouTube;
+    public string AvatarUrl { get; set; } = string.Empty;
+    public long FollowersOrSubscribers { get; set; }
+    public int VideoCount { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public string ChannelUrl { get; set; } = string.Empty;
+    public string DataSource { get; set; } = "Public";
+    public bool IsVerified { get; set; }
+}
+
+public class PublicChannelLookupRequest
+{
+    public string Query { get; set; } = string.Empty;
+    public SocialPlatform Platform { get; set; } = SocialPlatform.YouTube;
+    public string? Niche { get; set; }
+}
+
+public class PublicChannelAnalysisResult
+{
+    public ChannelMetrics Channel { get; set; } = new();
+    public EarningsReport Earnings { get; set; } = new();
+    public ChannelAuditResult Audit { get; set; } = new();
+    public List<string> AutoInsights { get; set; } = [];
+    public bool ResolvedLive { get; set; }
+    public string ResolutionSummary { get; set; } = string.Empty;
 }
 
 public class PlatformSummary

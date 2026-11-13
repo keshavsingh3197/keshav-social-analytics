@@ -64,13 +64,34 @@ public class SiteConfig
     public string DefaultDestinationBaseUrl { get; set; } = string.Empty;
     public string EcosystemConfigUrl { get; set; } = "https://id.keshavsingh.in/api/config";
     public string AdminPortalUrl { get; set; } = "https://admin.keshavsingh.in";
+    public AdMonetizationConfig Ads { get; set; } = new();
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class AdMonetizationConfig
+{
+    public bool AdsEnabled { get; set; }
+    public string AdSenseClientId { get; set; } = string.Empty;
+    public string HeaderAdSlotId { get; set; } = string.Empty;
+    public string InFeedAdSlotId { get; set; } = string.Empty;
+    public string SidebarAdSlotId { get; set; } = string.Empty;
+    public string FooterAdSlotId { get; set; } = string.Empty;
+    public string AdLabel { get; set; } = "Advertisement";
+    public bool SponsorBannerEnabled { get; set; }
+    public string SponsorBadge { get; set; } = "Featured";
+    public string SponsorTitle { get; set; } = string.Empty;
+    public string SponsorDescription { get; set; } = string.Empty;
+    public string SponsorCtaText { get; set; } = "Learn More";
+    public string SponsorUrl { get; set; } = string.Empty;
 }
 
 public class IntegrationSecrets
 {
     public string Id { get; set; } = "default";
     public string? YouTubeApiKey { get; set; }
+    public string? GoogleClientId { get; set; }
+    public string? GoogleClientSecret { get; set; }
+    public string? OAuthRedirectUri { get; set; }
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 
@@ -78,6 +99,11 @@ public class IntegrationSettingsView
 {
     public bool HasYouTubeApiKey { get; set; }
     public string? YouTubeApiKeyMasked { get; set; }
+    public bool HasGoogleClientSecret { get; set; }
+    public string? GoogleClientSecretMasked { get; set; }
+    public string? GoogleClientId { get; set; }
+    public string? OAuthRedirectUri { get; set; }
+    public bool IsYouTubeOAuthConfigured { get; set; }
     public string EcosystemConfigUrl { get; set; } = string.Empty;
     public string AdminPortalUrl { get; set; } = string.Empty;
     public DateTime UpdatedAt { get; set; }
@@ -87,6 +113,10 @@ public class UpdateIntegrationSettingsRequest
 {
     public string? YouTubeApiKey { get; set; }
     public bool ClearYouTubeApiKey { get; set; }
+    public string? GoogleClientId { get; set; }
+    public string? GoogleClientSecret { get; set; }
+    public bool ClearGoogleOAuth { get; set; }
+    public string? OAuthRedirectUri { get; set; }
     public string? EcosystemConfigUrl { get; set; }
     public string? AdminPortalUrl { get; set; }
 }

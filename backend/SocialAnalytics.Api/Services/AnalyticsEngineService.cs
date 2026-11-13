@@ -22,6 +22,45 @@ public class AnalyticsEngineService
             .ToList();
     }
 
+    public async Task<List<ChannelMetrics>> GetChannelsForUserAsync(
+        string? callerUserId,
+        bool isAdmin,
+        bool includeInactive = false)
+    {
+        if (string.IsNullOrWhiteSpace(callerUserId))
+            return [];
+
+        var channels = await _store.GetListAsync(Collection, SocialSeedData.DefaultChannels);
+        return channels
+            .Where(c => (includeInactive || c.IsActive) && IsOwnedByCaller(c, callerUserId, isAdmin))
+            .OrderByDescending(c => c.TotalViewsLast30Days)
+            .ToList();
+    }
+
+    public static bool IsOwnedByCaller(ChannelMetrics c, string? callerUserId, bool isAdmin)
+    {
+        if (string.IsNullOrWhiteSpace(callerUserId))
+            return false;
+
+        if (isAdmin)
+            return string.Equals(c.OwnerUserId, callerUserId, StringComparison.Ordinal) ||
+                   c.IsAdminOwned ||
+                   string.IsNullOrWhiteSpace(c.OwnerUserId);
+
+        return !c.IsAdminOwned && string.Equals(c.OwnerUserId, callerUserId, StringComparison.Ordinal);
+    }
+
+    public async Task<ChannelMetrics?> GetOwnedChannelAsync(string callerUserId, bool isAdmin, string id)
+    {
+        if (string.IsNullOrWhiteSpace(callerUserId) || string.IsNullOrWhiteSpace(id))
+            return null;
+
+        var channels = await _store.GetListAsync(Collection, SocialSeedData.DefaultChannels);
+        return channels.FirstOrDefault(c =>
+            c.Id.Equals(id, StringComparison.OrdinalIgnoreCase) &&
+            IsOwnedByCaller(c, callerUserId, isAdmin));
+    }
+
     public async Task<ChannelMetrics> UpsertChannelAsync(ChannelMetrics channel)
     {
         if (string.IsNullOrWhiteSpace(channel.Id))
@@ -32,6 +71,47 @@ public class AnalyticsEngineService
 
         channel.LastUpdated = DateTime.UtcNow;
         return await _store.UpsertItemAsync(Collection, channel.Id, c => c.Id, channel, SocialSeedData.DefaultChannels);
+    }
+
+    public async Task<ChannelMetrics?> UpsertUserChannelAsync(
+        string callerUserId,
+        bool isAdmin,
+        ChannelMetrics channel)
+    {
+        if (string.IsNullOrWhiteSpace(callerUserId))
+            return null;
+
+        if (!string.IsNullOrWhiteSpace(channel.Id))
+        {
+            var all = await _store.GetListAsync(Collection, SocialSeedData.DefaultChannels);
+            var existing = all.FirstOrDefault(c => c.Id.Equals(channel.Id, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null && !IsOwnedByCaller(existing, callerUserId, isAdmin))
+                return null;
+        }
+        else
+        {
+            // Prevent duplicate per-user handle entries on repeated Save clicks.
+            var existingMine = await GetChannelsForUserAsync(callerUserId, isAdmin, includeInactive: true);
+            var dup = existingMine.FirstOrDefault(c =>
+                (!string.IsNullOrWhiteSpace(channel.ExternalChannelId) &&
+                 c.ExternalChannelId.Equals(channel.ExternalChannelId, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrWhiteSpace(channel.ChannelHandle) &&
+                 c.Platform == channel.Platform &&
+                 c.ChannelHandle.Equals(channel.ChannelHandle, StringComparison.OrdinalIgnoreCase)));
+
+            channel.Id = dup?.Id ?? $"uch-{Guid.NewGuid():N}"[..12];
+        }
+
+        channel.OwnerUserId = callerUserId;
+        channel.IsAdminOwned = isAdmin;
+        return await UpsertChannelAsync(channel);
+    }
+
+    public async Task<bool> DeleteUserChannelAsync(string callerUserId, bool isAdmin, string id)
+    {
+        var owned = await GetOwnedChannelAsync(callerUserId, isAdmin, id);
+        if (owned is null) return false;
+        return await DeleteChannelAsync(owned.Id);
     }
 
     public Task<bool> DeleteChannelAsync(string id) =>
@@ -57,7 +137,20 @@ public class AnalyticsEngineService
     public async Task<List<RecentFeedVideo>> GetRecentVideosAsync(int limit = 24)
     {
         var channels = await GetAllChannelsAsync(includeInactive: false);
-        return channels
+        return ProjectRecentVideos(channels, limit);
+    }
+
+    public async Task<List<RecentFeedVideo>> GetRecentVideosForUserAsync(
+        string? callerUserId,
+        bool isAdmin,
+        int limit = 24)
+    {
+        var channels = await GetChannelsForUserAsync(callerUserId, isAdmin, includeInactive: false);
+        return ProjectRecentVideos(channels, limit);
+    }
+
+    private static List<RecentFeedVideo> ProjectRecentVideos(List<ChannelMetrics> channels, int limit) =>
+        channels
             .SelectMany(ch => (ch.RecentVideos ?? []).Select(v => new RecentFeedVideo
             {
                 ChannelId = ch.Id,
@@ -74,16 +167,28 @@ public class AnalyticsEngineService
             .OrderByDescending(v => v.PublishedAt)
             .Take(Math.Clamp(limit, 1, 60))
             .ToList();
-    }
 
     public async Task<List<PlatformSummary>> GetPlatformSummariesAsync()
     {
         var channels = await GetAllChannelsAsync(includeInactive: false);
+        return await BuildPlatformSummariesAsync(channels);
+    }
+
+    public async Task<List<PlatformSummary>> GetPlatformSummariesForUserAsync(
+        string? callerUserId,
+        bool isAdmin)
+    {
+        var channels = await GetChannelsForUserAsync(callerUserId, isAdmin, includeInactive: false);
+        return await BuildPlatformSummariesAsync(channels);
+    }
+
+    private async Task<List<PlatformSummary>> BuildPlatformSummariesAsync(List<ChannelMetrics> channels)
+    {
         var earningsConfig = await _configService.GetEarningsConfigAsync();
         var benchmarkMap = earningsConfig.PlatformBenchmarks
             .ToDictionary(b => b.Platform, b => b.DefaultRpmUsd, StringComparer.OrdinalIgnoreCase);
 
-        var summaries = channels
+        return channels
             .GroupBy(c => c.Platform)
             .Select(group =>
             {
@@ -121,7 +226,5 @@ public class AnalyticsEngineService
             })
             .OrderByDescending(s => s.EstimatedEarningsMonthly)
             .ToList();
-
-        return summaries;
     }
 }

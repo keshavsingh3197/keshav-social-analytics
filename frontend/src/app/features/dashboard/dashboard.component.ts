@@ -1,20 +1,23 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { EcosystemConfigService } from '../../core/services/ecosystem-config.service';
 import { AuthService } from '../../core/services/auth.service';
+import { AdSlotComponent } from '../shared/ad-slot/ad-slot.component';
+import { ChannelAnalyzerComponent } from '../shared/channel-analyzer/channel-analyzer.component';
 import {
   ChannelMetrics,
   PlatformSummary,
   RecentFeedVideo,
-  SiteConfig
+  SiteConfig,
+  YouTubeConnectionView
 } from '../../core/models/analytics.models';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, AdSlotComponent, ChannelAnalyzerComponent],
   template: `
     <div class="dashboard-page">
       @if (adminDenied()) {
@@ -30,23 +33,41 @@ import {
         </div>
       }
 
+      @if (statusToast()) {
+        <div class="alert-banner info">
+          <span>{{ statusToast() }}</span>
+          <button type="button" (click)="statusToast.set('')" class="alert-close">✕</button>
+        </div>
+      }
+
       <!-- Hero Command Banner -->
       <section class="hero-banner">
         <div class="hero-content">
           <div class="hero-badge">
             <span class="pulse-dot"></span>
-            <span>Live Feed Attribution • {{ verifiedCount() }} / {{ channels().length }} Channels Synced</span>
+            @if (auth.isAuthenticated()) {
+              <span>Private Workspace • {{ verifiedCount() }} / {{ channels().length }} Connected</span>
+            } @else {
+              <span>Instant Live Channel Analyzer • Public Creator Intelligence</span>
+            }
           </div>
           <h1>{{ siteConfig()?.heroTitle || 'Social Channel Performance & Growth Hub' }}</h1>
           <p>
-            {{ siteConfig()?.heroSubtitle || 'Track live engagement across connected channels, inspect real recent video metrics, estimate creator RPM earnings, and route traffic across your ecosystem apps.' }}
+            {{ siteConfig()?.heroSubtitle || 'Search any YouTube or social handle for instant analytics, RPM forecasts, and growth insights — or sign in to connect your own private channels.' }}
           </p>
           <div class="hero-cta-group">
             <a routerLink="/earnings" class="btn btn-primary">💰 Calculate Earnings</a>
             <a routerLink="/advisor" class="btn btn-secondary">🚀 Growth Advisor</a>
             <a routerLink="/funnel" class="btn btn-outline">🎯 Traffic Funnels</a>
+            @if (oauthConfigured() && auth.isAuthenticated()) {
+              <button type="button" (click)="connectYouTube()" [disabled]="oauthConnecting()" class="btn btn-yt">
+                ▶ {{ oauthConnecting() ? 'Opening Google...' : 'Connect YouTube' }}
+              </button>
+            } @else if (!auth.isAuthenticated()) {
+              <button type="button" (click)="auth.loginRedirect()" class="btn btn-outline">🔐 Sign in to Connect Channels</button>
+            }
             @if (auth.isAdmin()) {
-              <a routerLink="/admin" class="btn btn-admin">🛡️ Admin & Live Sync</a>
+              <a routerLink="/admin" class="btn btn-admin">🛡️ Admin Console</a>
             }
           </div>
         </div>
@@ -54,15 +75,15 @@ import {
         <div class="hero-kpi-grid">
           <div class="stat-pill">
             <span class="stat-num">{{ totalViewsLabel() }}</span>
-            <span class="stat-label">Tracked Views (30d/Feed)</span>
+            <span class="stat-label">{{ auth.isAuthenticated() && channels().length > 0 ? 'My Tracked Views (30d)' : 'Analyzed Channel Views' }}</span>
           </div>
           <div class="stat-pill">
             <span class="stat-num">{{ totalFollowersLabel() }}</span>
-            <span class="stat-label">Total Audience / Subs</span>
+            <span class="stat-label">{{ auth.isAuthenticated() && channels().length > 0 ? 'My Total Audience' : 'Analyzed Subscribers' }}</span>
           </div>
           <div class="stat-pill">
-            <span class="stat-num">{{ recentVideos().length }}</span>
-            <span class="stat-label">Live Videos Loaded</span>
+            <span class="stat-num">{{ activeVideoCount() }}</span>
+            <span class="stat-label">Recent Videos Loaded</span>
           </div>
           <div class="stat-pill accent">
             <span class="stat-num">\${{ totalRevenue() | number:'1.0-0' }}</span>
@@ -71,22 +92,70 @@ import {
         </div>
       </section>
 
-      @if (!loading() && channels().length === 0) {
-        <section class="empty-state-card">
-          <div class="empty-icon">📡</div>
-          <h2>No Connected Channels Configured Yet</h2>
-          <p>
-            Static placeholder channels have been removed. Sign in with your Admin account and click
-            <strong>Sync Central Channels &amp; Live YouTube Feeds</strong> in the Admin Console to pull
-            your real channels dynamically.
-          </p>
-          <div class="empty-actions">
-            @if (auth.isAdmin()) {
-              <a routerLink="/admin" class="btn btn-primary">Open Admin Sync Console →</a>
-            } @else if (!auth.isAuthenticated()) {
-              <button type="button" (click)="auth.loginRedirect()" class="btn btn-primary">Sign in with SSO as Admin</button>
+      <app-ad-slot placement="header" />
+
+      <app-channel-analyzer (channelSaved)="onChannelSaved($event)" />
+
+      <!-- Signed-in User Connected Platforms & YouTube OAuth -->
+      @if (auth.isAuthenticated()) {
+        <section class="workspace-bar">
+          <div class="workspace-info">
+            <h3>👤 My Private Channel Workspace</h3>
+            <p>Only channels you connect or save are shown here. Other visitors cannot view your analytics.</p>
+          </div>
+          <div class="workspace-controls">
+            @if (oauthConfigured()) {
+              <button type="button" (click)="connectYouTube()" [disabled]="oauthConnecting()" class="btn btn-yt">
+                ▶ {{ oauthConnecting() ? 'Connecting...' : 'Connect YouTube via OAuth' }}
+              </button>
+            } @else {
+              <span class="oauth-hint">Use Instant Search above &amp; click "+ Save to My Channels" to add any &#64;handle automatically.</span>
             }
           </div>
+        </section>
+
+        @if (youtubeConnections().length > 0) {
+          <section class="connections-strip">
+            @for (conn of youtubeConnections(); track conn.channelId) {
+              <div class="conn-pill">
+                @if (conn.avatarUrl) {
+                  <img [src]="conn.avatarUrl" [alt]="conn.channelTitle" />
+                }
+                <div class="conn-meta">
+                  <strong>{{ conn.channelTitle }}</strong>
+                  <span>{{ conn.channelHandle || conn.channelId }} • {{ conn.needsReconnect ? 'Reconnect needed' : 'OAuth linked' }}</span>
+                </div>
+                <button type="button" class="btn-chip" (click)="syncOAuthConnection(conn.channelId)">Sync</button>
+                <button type="button" class="btn-chip danger" (click)="disconnectOAuth(conn.channelId)">Disconnect</button>
+              </div>
+            }
+          </section>
+        }
+      } @else {
+        <section class="empty-state-card">
+          <div class="empty-icon">🔐</div>
+          <h2>Your Personal Analytics Workspace Is Private</h2>
+          <p>
+            Search and analyze any creator &#64;handle above right away — or sign in with SSO to connect your YouTube account,
+            track your own channels privately, and create trackable monetization funnels.
+          </p>
+          <div class="empty-actions">
+            <button type="button" (click)="auth.loginRedirect()" class="btn btn-primary">Sign in with SSO</button>
+          </div>
+        </section>
+      }
+
+      @if (auth.isAuthenticated() && !loading() && channels().length === 0) {
+        <section class="empty-state-card">
+          <div class="empty-icon">📡</div>
+          <h2>No Saved Channels in Your Workspace Yet</h2>
+          <p>
+            Search your YouTube &#64;handle or channel name above and click <strong>+ Save to My Channels</strong>
+            @if (oauthConfigured()) {
+              <span>, or click <strong>Connect YouTube via OAuth</strong> above</span>
+            }
+            to start tracking your private metrics.
+          </p>
         </section>
       }
 
@@ -96,7 +165,7 @@ import {
           <div class="section-header">
             <div>
               <h2>Platform Distribution &amp; RPM Value</h2>
-              <span class="section-sub">Aggregated dynamically from connected live channels</span>
+              <span class="section-sub">Aggregated privately from your connected workspace channels</span>
             </div>
             <span class="section-tag">{{ platformSummaries().length }} Active Platform(s)</span>
           </div>
@@ -147,8 +216,8 @@ import {
         <section class="section">
           <div class="section-header">
             <div>
-              <h2>Connected Channels &amp; Live Index</h2>
-              <span class="section-sub">Real creator properties synced from Central Admin &amp; YouTube feeds</span>
+              <h2>My Connected Channels &amp; Live Index</h2>
+              <span class="section-sub">Your private synced channels and connected social accounts</span>
             </div>
             <div class="filter-pills">
               <button type="button" [class.active]="selectedPlatform() === 'ALL'" (click)="selectedPlatform.set('ALL')">
@@ -173,7 +242,7 @@ import {
                   <th>Recent / 30d Views</th>
                   <th>Latest Videos</th>
                   <th>RPM / Est. Rev</th>
-                  <th>Synced</th>
+                  <th>Synced / Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -212,7 +281,13 @@ import {
                       <small class="rpm-sub">\${{ channel.rpmUsd || 0 }} RPM</small>
                     </td>
                     <td class="sync-date">
-                      {{ channel.lastSyncedAt ? (channel.lastSyncedAt | date:'MMM d, HH:mm') : (channel.lastUpdated | date:'MMM d') }}
+                      <div>{{ channel.lastSyncedAt ? (channel.lastSyncedAt | date:'MMM d, HH:mm') : (channel.lastUpdated | date:'MMM d') }}</div>
+                      @if (!channel.isAdminOwned && auth.isAuthenticated()) {
+                        <div class="row-actions">
+                          <button type="button" class="btn-chip" (click)="refreshUserChannel(channel.id)">Refresh</button>
+                          <button type="button" class="btn-chip danger" (click)="removeUserChannel(channel.id)">Remove</button>
+                        </div>
+                      }
                     </td>
                   </tr>
                 }
@@ -221,6 +296,8 @@ import {
           </div>
         </section>
       }
+
+      <app-ad-slot placement="infeed" />
 
       <!-- Live Latest Videos Feed -->
       @if (recentVideos().length > 0) {
@@ -644,7 +721,41 @@ import {
       font-size: 0.9rem;
     }
     .alert-banner.warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+    .alert-banner.info { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
     .alert-close { background: transparent; border: none; color: inherit; cursor: pointer; font-weight: 700; font-size: 1rem; }
+
+    .btn-yt { background: #dc2626; color: #fff; border: none; cursor: pointer; }
+    .btn-yt:hover { background: #b91c1c; }
+
+    .workspace-bar {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 1.15rem 1.35rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .workspace-info h3 { margin: 0 0 0.2rem; font-size: 1.02rem; color: #0f172a; }
+    .workspace-info p { margin: 0; font-size: 0.84rem; color: #64748b; }
+    .oauth-hint { font-size: 0.82rem; color: #475569; font-weight: 500; }
+    .connections-strip { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    .conn-pill {
+      background: #fff; border: 1px solid #cbd5e1; border-radius: 12px;
+      padding: 0.6rem 0.85rem; display: flex; align-items: center; gap: 0.65rem;
+    }
+    .conn-pill img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+    .conn-meta { display: flex; flex-direction: column; }
+    .conn-meta strong { font-size: 0.85rem; color: #0f172a; }
+    .conn-meta span { font-size: 0.74rem; color: #64748b; }
+    .row-actions { display: flex; gap: 0.35rem; margin-top: 0.3rem; }
+    .btn-chip {
+      padding: 0.25rem 0.6rem; border-radius: 6px; border: 1px solid #cbd5e1;
+      background: #f8fafc; color: #0f172a; font-size: 0.74rem; font-weight: 600; cursor: pointer;
+    }
+    .btn-chip.danger { color: #b91c1c; border-color: #fecaca; background: #fef2f2; }
   `]
 })
 export class DashboardComponent implements OnInit {
@@ -662,6 +773,13 @@ export class DashboardComponent implements OnInit {
   readonly selectedPlatform = signal<string>('ALL');
   readonly promoSites = computed(() => this.ecosystem.promoSiblingSites().slice(0, 6));
 
+  readonly statusToast = signal('');
+  readonly lookupResult = this.analytics.activeLookup;
+
+  readonly oauthConfigured = signal(false);
+  readonly oauthConnecting = signal(false);
+  readonly youtubeConnections = signal<YouTubeConnectionView[]>([]);
+
   readonly verifiedCount = computed(() => this.channels().filter(c => c.isVerifiedLive).length);
 
   readonly availablePlatforms = computed(() => {
@@ -675,9 +793,11 @@ export class DashboardComponent implements OnInit {
     return this.channels().filter(c => c.platform === sel);
   });
 
-  readonly totalViewsNumeric = computed(() =>
-    this.platformSummaries().reduce((acc, s) => acc + s.totalViews, 0)
-  );
+  readonly totalViewsNumeric = computed(() => {
+    const userSum = this.platformSummaries().reduce((acc, s) => acc + s.totalViews, 0);
+    if (this.channels().length > 0) return userSum;
+    return this.lookupResult()?.channel.totalViewsLast30Days ?? 0;
+  });
 
   readonly totalViewsLabel = computed(() => {
     const sum = this.totalViewsNumeric();
@@ -687,27 +807,120 @@ export class DashboardComponent implements OnInit {
   });
 
   readonly totalFollowersLabel = computed(() => {
-    const sum = this.platformSummaries().reduce((acc, s) => acc + s.totalAudience, 0);
+    const userSum = this.platformSummaries().reduce((acc, s) => acc + s.totalAudience, 0);
+    const sum = this.channels().length > 0 ? userSum : (this.lookupResult()?.channel.followersOrSubscribers ?? 0);
     if (sum >= 1_000_000) return `${(sum / 1_000_000).toFixed(2)}M`;
     if (sum >= 1_000) return `${(sum / 1_000).toFixed(1)}K`;
     return this.loading() ? '…' : `${sum}`;
   });
 
-  readonly totalRevenue = computed(() =>
-    this.platformSummaries().reduce((acc, s) => acc + s.estimatedEarningsMonthly, 0)
-  );
+  readonly activeVideoCount = computed(() => {
+    if (this.channels().length > 0) return this.recentVideos().length;
+    return this.lookupResult()?.channel.recentVideos?.length ?? 0;
+  });
+
+  readonly totalRevenue = computed(() => {
+    if (this.channels().length > 0) {
+      return this.platformSummaries().reduce((acc, s) => acc + s.estimatedEarningsMonthly, 0);
+    }
+    return this.lookupResult()?.earnings.totalEstimatedMonthlyRevenue ?? 0;
+  });
+
+  constructor() {
+    effect(() => {
+      if (this.auth.isAuthenticated()) {
+        this.loadYouTubeStatus();
+      } else {
+        this.youtubeConnections.set([]);
+      }
+    });
+  }
 
   ngOnInit(): void {
     this.route.queryParamMap.subscribe(params => {
       this.adminDenied.set(params.get('denied') === 'admin');
     });
+    this.analytics.getYouTubeOAuthPublicConfig().subscribe((cfg) => {
+      this.oauthConfigured.set(cfg.isOAuthConfigured);
+    });
+    this.loadWorkspaceData();
+    this.analytics.getSiteConfig().subscribe(cfg => this.siteConfig.set(cfg));
+  }
+
+  private loadWorkspaceData(): void {
     this.analytics.getChannels().subscribe(ch => this.channels.set(ch));
     this.analytics.getOverview().subscribe(ov => {
       this.platformSummaries.set(ov);
       this.loading.set(false);
     });
     this.analytics.getRecentVideos(12).subscribe(v => this.recentVideos.set(v));
-    this.analytics.getSiteConfig().subscribe(cfg => this.siteConfig.set(cfg));
+  }
+
+  private loadYouTubeStatus(): void {
+    this.analytics.getYouTubeOAuthStatus().subscribe((res) => {
+      this.oauthConfigured.set(res.isOAuthConfigured);
+      this.youtubeConnections.set(res.connections ?? []);
+    });
+  }
+
+  onChannelSaved(saved: ChannelMetrics): void {
+    this.statusToast.set(`Saved ${saved.channelName} (${saved.channelHandle}) to your private workspace.`);
+    this.loadWorkspaceData();
+  }
+
+  connectYouTube(): void {
+    this.oauthConnecting.set(true);
+    this.analytics.startYouTubeOAuth('/dashboard').subscribe({
+      next: ({ url }) => {
+        if (typeof window !== 'undefined' && url) {
+          window.location.href = url;
+        } else {
+          this.oauthConnecting.set(false);
+        }
+      },
+      error: (err) => {
+        this.oauthConnecting.set(false);
+        this.statusToast.set(err?.error?.message || 'YouTube OAuth is not available yet.');
+      }
+    });
+  }
+
+  syncOAuthConnection(channelId: string): void {
+    this.analytics.syncYouTubeConnection(channelId).subscribe({
+      next: (ch) => {
+        this.statusToast.set(`Synced live metrics for ${ch.channelName}.`);
+        this.loadWorkspaceData();
+        this.loadYouTubeStatus();
+      },
+      error: () => this.statusToast.set('Failed to refresh YouTube OAuth connection.')
+    });
+  }
+
+  disconnectOAuth(channelId: string): void {
+    this.analytics.disconnectYouTubeConnection(channelId).subscribe({
+      next: () => {
+        this.statusToast.set('Disconnected YouTube OAuth connection.');
+        this.loadYouTubeStatus();
+      }
+    });
+  }
+
+  refreshUserChannel(id: string): void {
+    this.analytics.refreshMyChannel(id).subscribe({
+      next: (ch) => {
+        this.statusToast.set(`Refreshed ${ch.channelName}.`);
+        this.loadWorkspaceData();
+      }
+    });
+  }
+
+  removeUserChannel(id: string): void {
+    this.analytics.deleteMyChannel(id).subscribe({
+      next: () => {
+        this.statusToast.set('Removed channel from your private workspace.');
+        this.loadWorkspaceData();
+      }
+    });
   }
 
   platformViewShare(views: number): number {

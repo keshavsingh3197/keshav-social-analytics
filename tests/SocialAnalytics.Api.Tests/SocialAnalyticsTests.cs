@@ -1,7 +1,11 @@
 using System.Net;
 using System.Reflection;
+using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
@@ -206,18 +210,264 @@ public sealed class SocialAnalyticsTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrationsView_MasksYouTubeApiKey()
+    public async Task IntegrationsView_MasksYouTubeApiKeyAndGoogleClientSecret()
     {
         var cfgService = new SocialConfigService(CreateStore());
         var view = await cfgService.UpdateIntegrationSettingsAsync(new UpdateIntegrationSettingsRequest
         {
-            YouTubeApiKey = "AIzaSyExampleSecretKey1234"
+            YouTubeApiKey = "AIzaSyExampleSecretKey1234",
+            GoogleClientId = "123456.apps.googleusercontent.com",
+            GoogleClientSecret = "GOCSPX-MyVerySecretValue9999",
+            OAuthRedirectUri = "https://social.keshavsingh.in/youtube/callback"
         });
 
         Assert.True(view.HasYouTubeApiKey);
         Assert.Equal("AIza••••••••1234", view.YouTubeApiKeyMasked);
         Assert.DoesNotContain("ExampleSecret", view.YouTubeApiKeyMasked);
+
+        Assert.True(view.HasGoogleClientSecret);
+        Assert.True(view.IsYouTubeOAuthConfigured);
+        Assert.Equal("123456.apps.googleusercontent.com", view.GoogleClientId);
+        Assert.Equal("GOCS••••••••9999", view.GoogleClientSecretMasked);
+        Assert.DoesNotContain("MyVerySecret", view.GoogleClientSecretMasked);
     }
+
+    [Fact]
+    public async Task PrivacyIsolation_AnonymousAndOtherUsersNeverSeeAdminOrPeerChannelsOrFunnels()
+    {
+        var store = CreateStore();
+        var cfgService = new SocialConfigService(store);
+        var analytics = new AnalyticsEngineService(store, cfgService);
+        var funnels = new FunnelService(store);
+        var yt = new YouTubeLiveFetchService(new StubHttpClientFactory(new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound))), NullLogger<YouTubeLiveFetchService>.Instance);
+        var rev = new RevenueCalculatorService(cfgService);
+        var adv = new GrowthAdvisorService(store, analytics);
+        var lookup = new ChannelLookupService(cfgService, yt, rev, adv);
+
+        // Admin-owned synced channels & funnels
+        await analytics.UpsertChannelAsync(new ChannelMetrics
+        {
+            Id = "central-keshav",
+            ChannelName = "Keshav Singh World",
+            ChannelHandle = "@keshavsinghworld",
+            Platform = SocialPlatform.YouTube,
+            FollowersOrSubscribers = 50000,
+            TotalViewsLast30Days = 400000,
+            OwnerUserId = "admin",
+            IsAdminOwned = true,
+            IsActive = true
+        });
+        await funnels.UpsertCampaignAsync(new FunnelCampaign
+        {
+            Id = "f-admin",
+            Title = "Admin Private Funnel",
+            TrackingSlug = "go-studio",
+            DestinationUrl = "https://studio.keshavsingh.in",
+            OwnerUserId = "admin",
+            IsAdminOwned = true,
+            TotalClicks = 99
+        });
+
+        // User A creates their own channel & funnel
+        var userAChan = await analytics.UpsertUserChannelAsync("user-a", isAdmin: false, new ChannelMetrics
+        {
+            ChannelName = "User A Creator",
+            ChannelHandle = "@useracreator",
+            Platform = SocialPlatform.YouTube,
+            FollowersOrSubscribers = 1500,
+            TotalViewsLast30Days = 20000
+        });
+        Assert.NotNull(userAChan);
+        var userAFunnel = await funnels.UpsertUserCampaignAsync("user-a", isAdmin: false, new FunnelCampaign
+        {
+            Title = "User A Link",
+            DestinationUrl = "https://example.com/a",
+            TrackingSlug = "user-a-link"
+        });
+        Assert.NotNull(userAFunnel);
+
+        // User B creates their own channel
+        await analytics.UpsertUserChannelAsync("user-b", isAdmin: false, new ChannelMetrics
+        {
+            ChannelName = "User B Studio",
+            ChannelHandle = "@userbstudio",
+            Platform = SocialPlatform.Instagram,
+            FollowersOrSubscribers = 3000,
+            TotalViewsLast30Days = 45000
+        });
+
+        // Anonymous controller call sees ZERO channels, summaries, or funnels
+        var anonCtrl = BuildAnalyticsController(analytics, lookup, cfgService, yt, principal: new ClaimsPrincipal(new ClaimsIdentity()));
+        var anonChannels = Assert.IsType<OkObjectResult>((await anonCtrl.GetChannels()).Result).Value as List<ChannelMetrics>;
+        var anonOverview = Assert.IsType<OkObjectResult>((await anonCtrl.GetOverview()).Result).Value as List<PlatformSummary>;
+        Assert.Empty(anonChannels!);
+        Assert.Empty(anonOverview!);
+
+        var anonFunnelCtrl = BuildFunnelController(funnels, new ClaimsPrincipal(new ClaimsIdentity()));
+        var anonFunnels = Assert.IsType<OkObjectResult>((await anonFunnelCtrl.GetCampaigns()).Result).Value as List<FunnelCampaign>;
+        Assert.Empty(anonFunnels!);
+
+        // User A sees ONLY User A's data (not Admin's, not User B's)
+        var userAPrincipal = MakePrincipal("user-a", "User");
+        var userACtrl = BuildAnalyticsController(analytics, lookup, cfgService, yt, userAPrincipal);
+        var userAChannels = Assert.IsType<OkObjectResult>((await userACtrl.GetChannels()).Result).Value as List<ChannelMetrics>;
+        Assert.Single(userAChannels!);
+        Assert.Equal("@useracreator", userAChannels![0].ChannelHandle);
+
+        // User B cannot delete User A's channel or funnel
+        Assert.False(await analytics.DeleteUserChannelAsync("user-b", isAdmin: false, userAChan!.Id));
+        Assert.False(await funnels.DeleteUserCampaignAsync("user-b", isAdmin: false, userAFunnel!.Id));
+
+        // Admin sees Admin's channels
+        var adminCtrl = BuildAnalyticsController(analytics, lookup, cfgService, yt, MakePrincipal("admin", "Admin"));
+        var adminChannels = Assert.IsType<OkObjectResult>((await adminCtrl.GetChannels()).Result).Value as List<ChannelMetrics>;
+        Assert.Single(adminChannels!);
+        Assert.Equal("@keshavsinghworld", adminChannels![0].ChannelHandle);
+    }
+
+    [Fact]
+    public async Task SearchAndLookup_AutoFindsChannelsViaApiAndKeylessFallback()
+    {
+        var published = DateTime.UtcNow.AddDays(-2).ToString("O");
+        var handler = new StubHttpHandler(req =>
+        {
+            var url = req.RequestUri!.ToString();
+            if (url.Contains("youtube.com/results"))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""
+                        <html><script>var ytInitialData = {"contents":{"channelRenderer":{"channelId":"UC8888888888888888888888","title":{"simpleText":"Creator Demo"},"navigationEndpoint":{"browseEndpoint":{"canonicalBaseUrl":"/@creatordemo"}},"subscriberCountText":{"simpleText":"@creatordemo"},"videoCountText":{"simpleText":"42.5K subscribers"}}}};</script></html>
+                        """, Encoding.UTF8, "text/html")
+                };
+            }
+            if (url.Contains("youtube.com/@creatordemo"))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""<html><meta property="og:title" content="Creator Demo"><script>{"externalId":"UC8888888888888888888888","subscriberCountText":{"simpleText":"42.5K subscribers"}}</script></html>""")
+                };
+            }
+            if (url.Contains("UC8888888888888888888888"))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent($"""
+                        <feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+                          <entry><yt:videoId>vidDemo1</yt:videoId><title>AI Coding Guide</title><published>{published}</published><media:group><media:community><media:statistics views="12000"/></media:community></media:group></entry>
+                        </feed>
+                        """)
+                };
+            }
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+
+        var store = CreateStore();
+        var cfgService = new SocialConfigService(store);
+        var analytics = new AnalyticsEngineService(store, cfgService);
+        var yt = new YouTubeLiveFetchService(new StubHttpClientFactory(handler), NullLogger<YouTubeLiveFetchService>.Instance);
+        var lookup = new ChannelLookupService(cfgService, yt, new RevenueCalculatorService(cfgService), new GrowthAdvisorService(store, analytics));
+
+        var hits = await lookup.SearchAsync("Creator Demo", SocialPlatform.YouTube);
+        var hit = Assert.Single(hits);
+        Assert.Equal("@creatordemo", hit.ChannelHandle);
+        Assert.Equal(42500, hit.FollowersOrSubscribers);
+
+        var analysis = await lookup.AnalyzeAsync(new PublicChannelLookupRequest { Query = "Creator Demo", Platform = SocialPlatform.YouTube });
+        Assert.True(analysis.ResolvedLive);
+        Assert.Equal(12000, analysis.Channel.TotalViewsLast30Days);
+        Assert.True(analysis.Earnings.TotalEstimatedMonthlyRevenue > 0);
+        Assert.NotEmpty(analysis.Audit.PrioritySuggestions);
+        Assert.NotEmpty(analysis.AutoInsights);
+    }
+
+    [Fact]
+    public async Task SiteConfig_SanitizesAdSenseIdsAndRejectsUnsafeInputs()
+    {
+        var cfgService = new SocialConfigService(CreateStore());
+        var saved = await cfgService.SaveSiteConfigAsync(new SiteConfig
+        {
+            HeroTitle = "Creator Hub",
+            Ads = new AdMonetizationConfig
+            {
+                AdsEnabled = true,
+                AdSenseClientId = "ca-pub-1234567890123456",
+                HeaderAdSlotId = "9876543210",
+                InFeedAdSlotId = "<script>alert(1)</script>",
+                SponsorUrl = "javascript:alert(1)"
+            }
+        });
+
+        Assert.True(saved.Ads.AdsEnabled);
+        Assert.Equal("ca-pub-1234567890123456", saved.Ads.AdSenseClientId);
+        Assert.Equal("9876543210", saved.Ads.HeaderAdSlotId);
+        Assert.Equal(string.Empty, saved.Ads.InFeedAdSlotId);
+        Assert.Equal(string.Empty, saved.Ads.SponsorUrl);
+    }
+
+    [Fact]
+    public async Task YouTubeOAuthService_EnforcesAuthorizeAndBindsStatePerUser()
+    {
+        var authAttrConfig = typeof(YouTubeOAuthController).GetMethod(nameof(YouTubeOAuthController.GetPublicConfig))?.GetCustomAttribute<AllowAnonymousAttribute>();
+        var authAttrStart = typeof(YouTubeOAuthController).GetMethod(nameof(YouTubeOAuthController.StartConnect))?.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(authAttrConfig);
+        Assert.NotNull(authAttrStart);
+
+        var store = CreateStore();
+        var cfgService = new SocialConfigService(store);
+        await cfgService.UpdateIntegrationSettingsAsync(new UpdateIntegrationSettingsRequest
+        {
+            GoogleClientId = "test-client-id",
+            GoogleClientSecret = "test-client-secret",
+            OAuthRedirectUri = "https://social.keshavsingh.in/youtube/callback"
+        });
+
+        var yt = new YouTubeLiveFetchService(new StubHttpClientFactory(new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound))), NullLogger<YouTubeLiveFetchService>.Instance);
+        var oauthSvc = new YouTubeOAuthService(
+            store,
+            cfgService,
+            new AnalyticsEngineService(store, cfgService),
+            yt,
+            new StubHttpClientFactory(new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound))),
+            new EphemeralDataProtectionProvider(),
+            NullLogger<YouTubeOAuthService>.Instance);
+
+        var startUrl = await oauthSvc.BeginConnectAsync("user-1", "/dashboard", "https://social.keshavsingh.in");
+        Assert.Contains("accounts.google.com/o/oauth2/v2/auth", startUrl);
+        Assert.Contains("test-client-id", startUrl);
+
+        var stateStart = startUrl.IndexOf("state=", StringComparison.Ordinal) + 6;
+        var stateEnd = startUrl.IndexOf('&', stateStart);
+        var state = Uri.UnescapeDataString(startUrl[stateStart..stateEnd]);
+
+        // Different user cannot redeem user-1's state
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            oauthSvc.CompleteConnectAsync("user-2", false, "auth-code", state));
+    }
+
+    private static ClaimsPrincipal MakePrincipal(string userId, string role) =>
+        new(new ClaimsIdentity(
+        [
+            new Claim("sub", userId),
+            new Claim(ClaimTypes.Role, role)
+        ], "TestAuth"));
+
+    private static AnalyticsController BuildAnalyticsController(
+        AnalyticsEngineService analytics,
+        ChannelLookupService lookup,
+        SocialConfigService cfg,
+        YouTubeLiveFetchService yt,
+        ClaimsPrincipal principal) =>
+        new(analytics, lookup, cfg, yt)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = principal } }
+        };
+
+    private static TrafficFunnelController BuildFunnelController(FunnelService funnels, ClaimsPrincipal principal) =>
+        new(funnels)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = principal } }
+        };
 
     private sealed class FakeHostEnv(string root) : IHostEnvironment
     {

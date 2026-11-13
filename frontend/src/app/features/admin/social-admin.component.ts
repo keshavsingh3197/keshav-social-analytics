@@ -5,6 +5,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { EcosystemConfigService } from '../../core/services/ecosystem-config.service';
 import {
+  AdMonetizationConfig,
   AdminStatus,
   ChannelMetrics,
   EarningsConfig,
@@ -468,14 +469,57 @@ type AdminTab = 'channels' | 'funnels' | 'growth' | 'earnings' | 'site';
               <div class="field"><label>Default Funnel Destination</label><input [(ngModel)]="siteForm.defaultDestinationBaseUrl" /></div>
             </div>
             <div class="btn-row">
-              <button (click)="saveSiteConfig()" class="btn-primary">💾 Save Site Config</button>
+              <button (click)="saveSiteConfig()" class="btn-primary">💾 Save Site &amp; Ad Config</button>
             </div>
 
             <hr class="divider" />
-            <h2>🔑 Live YouTube &amp; Ecosystem Integrations (Admin-Only Secrets)</h2>
+            <h2>💰 Google AdSense &amp; Sponsor Monetization</h2>
             <p class="muted">
-              Without a YouTube Data API v3 Key, SocialPulse automatically fetches public live videos via official YouTube RSS feeds.
-              Adding a YouTube API Key enables exact total subscriber &amp; engagement-rate sync. Keys are stored server-side and never exposed publicly.
+              Configure runtime AdSense Publisher ID (<code>ca-pub-...</code>) and slot IDs for high-traffic pages,
+              or enable a sponsor banner fallback. Left empty = no empty ad boxes shown.
+            </p>
+            <div class="form-grid">
+              <div class="field field-wide">
+                <label class="chk">
+                  <input type="checkbox" [(ngModel)]="adsForm.adsEnabled" />
+                  <span>Enable Google AdSense Slots Across Site</span>
+                </label>
+              </div>
+              <div class="field">
+                <label>AdSense Publisher Client ID (ca-pub-...)</label>
+                <input [(ngModel)]="adsForm.adSenseClientId" placeholder="ca-pub-0000000000000000" />
+              </div>
+              <div class="field">
+                <label>Ad Container Label</label>
+                <input [(ngModel)]="adsForm.adLabel" placeholder="Advertisement" />
+              </div>
+              <div class="field"><label>Header Ad Slot ID</label><input [(ngModel)]="adsForm.headerAdSlotId" placeholder="10-digit slot ID" /></div>
+              <div class="field"><label>In-Feed Ad Slot ID</label><input [(ngModel)]="adsForm.inFeedAdSlotId" placeholder="10-digit slot ID" /></div>
+              <div class="field"><label>Sidebar Ad Slot ID</label><input [(ngModel)]="adsForm.sidebarAdSlotId" placeholder="10-digit slot ID" /></div>
+              <div class="field"><label>Footer Ad Slot ID</label><input [(ngModel)]="adsForm.footerAdSlotId" placeholder="10-digit slot ID" /></div>
+
+              <div class="field field-wide">
+                <label class="chk">
+                  <input type="checkbox" [(ngModel)]="adsForm.sponsorBannerEnabled" />
+                  <span>Enable Sponsor / Affiliate Banner Fallback (when AdSense slot is unset)</span>
+                </label>
+              </div>
+              <div class="field"><label>Sponsor Badge</label><input [(ngModel)]="adsForm.sponsorBadge" placeholder="Featured" /></div>
+              <div class="field"><label>Sponsor Title</label><input [(ngModel)]="adsForm.sponsorTitle" placeholder="Creator Gear & Tools" /></div>
+              <div class="field field-wide"><label>Sponsor Description</label><input [(ngModel)]="adsForm.sponsorDescription" placeholder="Short promo copy..." /></div>
+              <div class="field"><label>Sponsor CTA Text</label><input [(ngModel)]="adsForm.sponsorCtaText" placeholder="Learn More" /></div>
+              <div class="field"><label>Sponsor Destination URL (https://)</label><input [(ngModel)]="adsForm.sponsorUrl" placeholder="https://..." /></div>
+            </div>
+            <div class="btn-row">
+              <button (click)="saveSiteConfig()" class="btn-primary">💾 Save AdSense &amp; Sponsor Config</button>
+            </div>
+
+            <hr class="divider" />
+            <h2>🔑 Live YouTube OAuth, API Key &amp; Ecosystem Integrations (Admin-Only Secrets)</h2>
+            <p class="muted">
+              Without a YouTube Data API v3 Key, SocialPulse still searches public channels and fetches live RSS videos.
+              Adding a YouTube API Key improves search &amp; stats speed, and configuring Google OAuth lets creators connect
+              their own YouTube channels automatically (matching AnimStudio's YouTube OAuth flow).
             </p>
             <div class="form-grid">
               <div class="field">
@@ -486,11 +530,26 @@ type AdminTab = 'channels' | 'funnels' | 'growth' | 'earnings' | 'site';
                 <label>YouTube Data API v3 Key {{ integrationsView()?.hasYouTubeApiKey ? '(Saved: ' + integrationsView()?.youTubeApiKeyMasked + ')' : '(Optional)' }}</label>
                 <input type="password" [(ngModel)]="integrationsForm.youTubeApiKey" placeholder="Paste new API key to update…" autocomplete="off" />
               </div>
+              <div class="field">
+                <label>Google OAuth Client ID {{ integrationsView()?.isYouTubeOAuthConfigured ? '✅ Active' : '(For User Connect YouTube)' }}</label>
+                <input [(ngModel)]="integrationsForm.googleClientId" placeholder="...apps.googleusercontent.com" autocomplete="off" />
+              </div>
+              <div class="field">
+                <label>Google OAuth Client Secret {{ integrationsView()?.hasGoogleClientSecret ? '(Saved: ' + integrationsView()?.googleClientSecretMasked + ')' : '(Optional)' }}</label>
+                <input type="password" [(ngModel)]="integrationsForm.googleClientSecret" placeholder="Paste new Client Secret to update…" autocomplete="off" />
+              </div>
+              <div class="field field-wide">
+                <label>OAuth Redirect URI</label>
+                <input [(ngModel)]="integrationsForm.oAuthRedirectUri" placeholder="https://social.keshavsingh.in/youtube/callback" />
+              </div>
             </div>
             <div class="btn-row">
-              <button (click)="saveIntegrations(false)" class="btn-primary">🔐 Save Integration Settings</button>
+              <button (click)="saveIntegrations(false, false)" class="btn-primary">🔐 Save Integration Settings</button>
               @if (integrationsView()?.hasYouTubeApiKey) {
-                <button (click)="saveIntegrations(true)" class="btn-sm danger">Remove Saved Key</button>
+                <button (click)="saveIntegrations(true, false)" class="btn-sm danger">Remove Saved API Key</button>
+              }
+              @if (integrationsView()?.isYouTubeOAuthConfigured || integrationsView()?.hasGoogleClientSecret) {
+                <button (click)="saveIntegrations(false, true)" class="btn-sm danger">Clear Google OAuth</button>
               }
             </div>
 
@@ -578,7 +637,13 @@ export class SocialAdminComponent implements OnInit {
   readonly funnels = signal<FunnelCampaign[]>([]);
   readonly suggestions = signal<GrowthSuggestion[]>([]);
 
-  integrationsForm = { ecosystemConfigUrl: 'https://id.keshavsingh.in/api/config', youTubeApiKey: '' };
+  integrationsForm = {
+    ecosystemConfigUrl: 'https://id.keshavsingh.in/api/config',
+    youTubeApiKey: '',
+    googleClientId: '',
+    googleClientSecret: '',
+    oAuthRedirectUri: ''
+  };
 
   channelForm: ChannelMetrics = this.emptyChannel();
   funnelForm: FunnelCampaign = this.emptyFunnel();
@@ -588,6 +653,7 @@ export class SocialAdminComponent implements OnInit {
   keywordsCsv = '';
 
   earningsForm: EarningsConfig = { platformBenchmarks: [], niches: [], opportunities: [] };
+  adsForm: AdMonetizationConfig = this.emptyAds();
   siteForm: SiteConfig = {
     heroTitle: '',
     heroSubtitle: '',
@@ -616,6 +682,8 @@ export class SocialAdminComponent implements OnInit {
     this.analytics.getIntegrations().subscribe(v => {
       this.integrationsView.set(v);
       this.integrationsForm.ecosystemConfigUrl = v.ecosystemConfigUrl || 'https://id.keshavsingh.in/api/config';
+      this.integrationsForm.googleClientId = v.googleClientId || '';
+      this.integrationsForm.oAuthRedirectUri = v.oAuthRedirectUri || '';
     });
     this.analytics.getGrowthConfig().subscribe(cfg => {
       this.growthConfigForm = cfg;
@@ -632,6 +700,7 @@ export class SocialAdminComponent implements OnInit {
     });
     this.analytics.getSiteConfig().subscribe(cfg => {
       this.siteForm = { ...cfg };
+      this.adsForm = { ...this.emptyAds(), ...(cfg.ads || {}) };
     });
   }
 
@@ -686,16 +755,27 @@ export class SocialAdminComponent implements OnInit {
     });
   }
 
-  saveIntegrations(clearKey: boolean): void {
+  saveIntegrations(clearKey: boolean, clearOAuth: boolean): void {
     this.analytics.saveIntegrations({
       clearYouTubeApiKey: clearKey,
       youTubeApiKey: clearKey ? '' : this.integrationsForm.youTubeApiKey,
+      googleClientId: clearOAuth ? '' : this.integrationsForm.googleClientId,
+      googleClientSecret: clearOAuth ? '' : this.integrationsForm.googleClientSecret,
+      clearGoogleOAuth: clearOAuth,
+      oAuthRedirectUri: clearOAuth ? '' : this.integrationsForm.oAuthRedirectUri,
       ecosystemConfigUrl: this.integrationsForm.ecosystemConfigUrl
     }).subscribe({
       next: saved => {
         this.integrationsView.set(saved);
         this.integrationsForm.youTubeApiKey = '';
-        this.notify(clearKey ? 'Saved API key removed.' : 'Integration settings saved.');
+        this.integrationsForm.googleClientSecret = '';
+        this.integrationsForm.googleClientId = saved.googleClientId || '';
+        this.integrationsForm.oAuthRedirectUri = saved.oAuthRedirectUri || '';
+        this.notify(
+          clearKey ? 'Saved YouTube API key removed.'
+            : clearOAuth ? 'Saved Google OAuth credentials removed.'
+            : 'Integration settings saved.'
+        );
       },
       error: err => this.notifyError('Failed to save integration settings', err)
     });
@@ -832,13 +912,32 @@ export class SocialAdminComponent implements OnInit {
 
   // ---- Site Config ----
   saveSiteConfig(): void {
-    this.analytics.saveSiteConfig(this.siteForm).subscribe({
+    this.analytics.saveSiteConfig({ ...this.siteForm, ads: { ...this.adsForm } }).subscribe({
       next: saved => {
-        this.siteForm = saved;
-        this.notify('SocialPulse site configuration saved.');
+        this.siteForm = { ...saved };
+        this.adsForm = { ...this.emptyAds(), ...(saved.ads || {}) };
+        this.notify('SocialPulse site & monetization configuration saved.');
       },
       error: err => this.notifyError('Failed to save site config', err)
     });
+  }
+
+  private emptyAds(): AdMonetizationConfig {
+    return {
+      adsEnabled: false,
+      adSenseClientId: '',
+      headerAdSlotId: '',
+      inFeedAdSlotId: '',
+      sidebarAdSlotId: '',
+      footerAdSlotId: '',
+      adLabel: 'Advertisement',
+      sponsorBannerEnabled: false,
+      sponsorBadge: 'Featured',
+      sponsorTitle: '',
+      sponsorDescription: '',
+      sponsorCtaText: 'Learn More',
+      sponsorUrl: ''
+    };
   }
 
   private notify(message: string): void {
