@@ -485,9 +485,16 @@ type AdminTab = 'channels' | 'funnels' | 'growth' | 'earnings' | 'site';
                   <span>Enable Google AdSense Slots Across Site</span>
                 </label>
               </div>
-              <div class="field">
-                <label>AdSense Publisher Client ID (ca-pub-...)</label>
-                <input [(ngModel)]="adsForm.adSenseClientId" placeholder="ca-pub-0000000000000000" />
+              <div class="field field-wide">
+                <label>AdSense Publisher ID (Managed in Central Admin)</label>
+                <div class="central-pill-row">
+                  <span class="status-pill" [class.ok]="!!(adsForm.adSenseClientId || integrationsView()?.adSenseClientId)">
+                    {{ adsForm.adSenseClientId || integrationsView()?.adSenseClientId || 'Not configured yet in Central Admin' }}
+                  </span>
+                  <a [href]="ecosystem.adminPortalUrl() + '/settings?tab=integrations'" target="_blank" rel="noopener" class="btn-sm">
+                    Manage Publisher ID in Central Admin →
+                  </a>
+                </div>
               </div>
               <div class="field">
                 <label>Ad Container Label</label>
@@ -515,42 +522,49 @@ type AdminTab = 'channels' | 'funnels' | 'growth' | 'earnings' | 'site';
             </div>
 
             <hr class="divider" />
-            <h2>🔑 Live YouTube OAuth, API Key &amp; Ecosystem Integrations (Admin-Only Secrets)</h2>
+            <h2>🔑 Shared Third-Party Credentials &amp; Per-App OAuth</h2>
             <p class="muted">
-              Without a YouTube Data API v3 Key, SocialPulse still searches public channels and fetches live RSS videos.
-              Adding a YouTube API Key improves search &amp; stats speed, and configuring Google OAuth lets creators connect
-              their own YouTube channels automatically (matching AnimStudio's YouTube OAuth flow).
+              YouTube Data API Key, Google OAuth Client ID/Secret, and AdSense Publisher ID are stored AES-encrypted in
+              <code>Central Admin (AdminDb)</code> and read server-side — never exposed over public APIs.
+              Configure per-app Redirect URI and ecosystem endpoint below.
             </p>
+            <div class="global-summary">
+              <div>
+                <strong>YouTube Data API v3 Key:</strong>
+                @if (integrationsView()?.hasYouTubeApiKey) {
+                  <span> ✅ Configured ({{ integrationsView()?.youTubeApiKeyMasked || '••••' }})</span>
+                } @else {
+                  <span> Not set — keyless RSS/public fallback active</span>
+                }
+              </div>
+              <div>
+                <strong>Google / YouTube OAuth App:</strong>
+                @if (integrationsView()?.isYouTubeOAuthConfigured) {
+                  <span> ✅ Active ({{ integrationsView()?.googleClientId }})</span>
+                } @else {
+                  <span> Not set in Central Admin</span>
+                }
+              </div>
+              <div>
+                <strong>Google AdSense Publisher ID:</strong>
+                <span> {{ integrationsView()?.adSenseClientId || adsForm.adSenseClientId || 'Not set in Central Admin' }}</span>
+              </div>
+            </div>
             <div class="form-grid">
               <div class="field">
                 <label>Central Config API URL</label>
                 <input [(ngModel)]="integrationsForm.ecosystemConfigUrl" placeholder="https://id.keshavsingh.in/api/config" />
               </div>
               <div class="field">
-                <label>YouTube Data API v3 Key {{ integrationsView()?.hasYouTubeApiKey ? '(Saved: ' + integrationsView()?.youTubeApiKeyMasked + ')' : '(Optional)' }}</label>
-                <input type="password" [(ngModel)]="integrationsForm.youTubeApiKey" placeholder="Paste new API key to update…" autocomplete="off" />
-              </div>
-              <div class="field">
-                <label>Google OAuth Client ID {{ integrationsView()?.isYouTubeOAuthConfigured ? '✅ Active' : '(For User Connect YouTube)' }}</label>
-                <input [(ngModel)]="integrationsForm.googleClientId" placeholder="...apps.googleusercontent.com" autocomplete="off" />
-              </div>
-              <div class="field">
-                <label>Google OAuth Client Secret {{ integrationsView()?.hasGoogleClientSecret ? '(Saved: ' + integrationsView()?.googleClientSecretMasked + ')' : '(Optional)' }}</label>
-                <input type="password" [(ngModel)]="integrationsForm.googleClientSecret" placeholder="Paste new Client Secret to update…" autocomplete="off" />
-              </div>
-              <div class="field field-wide">
-                <label>OAuth Redirect URI</label>
+                <label>Per-App OAuth Redirect URI</label>
                 <input [(ngModel)]="integrationsForm.oAuthRedirectUri" placeholder="https://social.keshavsingh.in/youtube/callback" />
               </div>
             </div>
             <div class="btn-row">
-              <button (click)="saveIntegrations(false, false)" class="btn-primary">🔐 Save Integration Settings</button>
-              @if (integrationsView()?.hasYouTubeApiKey) {
-                <button (click)="saveIntegrations(true, false)" class="btn-sm danger">Remove Saved API Key</button>
-              }
-              @if (integrationsView()?.isYouTubeOAuthConfigured || integrationsView()?.hasGoogleClientSecret) {
-                <button (click)="saveIntegrations(false, true)" class="btn-sm danger">Clear Google OAuth</button>
-              }
+              <button (click)="saveIntegrations()" class="btn-primary">💾 Save Per-App Routing Config</button>
+              <a [href]="ecosystem.adminPortalUrl() + '/settings?tab=integrations'" target="_blank" rel="noopener" class="btn-secondary link-btn">
+                Manage Shared API Keys &amp; Secrets in Central Admin →
+              </a>
             </div>
 
             <hr class="divider" />
@@ -598,6 +612,12 @@ type AdminTab = 'channels' | 'funnels' | 'growth' | 'earnings' | 'site';
     .field { display: flex; flex-direction: column; gap: 0.3rem; }
     .field-wide { grid-column: 1 / -1; }
     .field label { font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.02em; }
+    .field label.chk, label.chk { display: inline-flex; flex-direction: row; align-items: center; gap: 0.55rem; font-size: 0.9rem; font-weight: 600; color: #1e293b; text-transform: none; letter-spacing: normal; cursor: pointer; }
+    .field label.chk input[type="checkbox"], label.chk input[type="checkbox"] { width: auto; margin: 0; accent-color: #2563eb; cursor: pointer; }
+    .central-pill-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.65rem; }
+    .status-pill { display: inline-flex; align-items: center; padding: 0.35rem 0.75rem; border-radius: 999px; font-size: 0.82rem; font-weight: 600; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+    .status-pill.ok { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+    .link-btn { text-decoration: none; display: inline-flex; align-items: center; }
     .field input, .field select, .field textarea { border: 1px solid #cbd5e1; border-radius: 7px; padding: 0.5rem 0.65rem; font-size: 0.9rem; color: #0f172a; font-family: inherit; }
     .checkbox-field { justify-content: flex-end; }
     .checkbox-field label { text-transform: none; font-size: 0.9rem; display: flex; align-items: center; gap: 0.45rem; cursor: pointer; }
@@ -639,9 +659,6 @@ export class SocialAdminComponent implements OnInit {
 
   integrationsForm = {
     ecosystemConfigUrl: 'https://id.keshavsingh.in/api/config',
-    youTubeApiKey: '',
-    googleClientId: '',
-    googleClientSecret: '',
     oAuthRedirectUri: ''
   };
 
@@ -676,14 +693,25 @@ export class SocialAdminComponent implements OnInit {
       next: s => this.status.set(s),
       error: err => this.notifyError('Failed to verify Admin API session', err)
     });
-    this.analytics.getAdminChannels().subscribe(list => this.channels.set(list));
-    this.analytics.getAdminFunnels().subscribe(list => this.funnels.set(list));
-    this.analytics.getAdminSuggestions().subscribe(list => this.suggestions.set(list));
-    this.analytics.getIntegrations().subscribe(v => {
-      this.integrationsView.set(v);
-      this.integrationsForm.ecosystemConfigUrl = v.ecosystemConfigUrl || 'https://id.keshavsingh.in/api/config';
-      this.integrationsForm.googleClientId = v.googleClientId || '';
-      this.integrationsForm.oAuthRedirectUri = v.oAuthRedirectUri || '';
+    this.analytics.getAdminChannels().subscribe({
+      next: list => this.channels.set(list),
+      error: err => this.notifyError('Failed to load channels', err)
+    });
+    this.analytics.getAdminFunnels().subscribe({
+      next: list => this.funnels.set(list),
+      error: err => this.notifyError('Failed to load funnels', err)
+    });
+    this.analytics.getAdminSuggestions().subscribe({
+      next: list => this.suggestions.set(list),
+      error: err => this.notifyError('Failed to load recommendations', err)
+    });
+    this.analytics.getIntegrations().subscribe({
+      next: v => {
+        this.integrationsView.set(v);
+        this.integrationsForm.ecosystemConfigUrl = v.ecosystemConfigUrl || 'https://id.keshavsingh.in/api/config';
+        this.integrationsForm.oAuthRedirectUri = v.oAuthRedirectUri || '';
+      },
+      error: err => this.notifyError('Failed to load integrations status', err)
     });
     this.analytics.getGrowthConfig().subscribe(cfg => {
       this.growthConfigForm = cfg;
@@ -755,27 +783,15 @@ export class SocialAdminComponent implements OnInit {
     });
   }
 
-  saveIntegrations(clearKey: boolean, clearOAuth: boolean): void {
+  saveIntegrations(): void {
     this.analytics.saveIntegrations({
-      clearYouTubeApiKey: clearKey,
-      youTubeApiKey: clearKey ? '' : this.integrationsForm.youTubeApiKey,
-      googleClientId: clearOAuth ? '' : this.integrationsForm.googleClientId,
-      googleClientSecret: clearOAuth ? '' : this.integrationsForm.googleClientSecret,
-      clearGoogleOAuth: clearOAuth,
-      oAuthRedirectUri: clearOAuth ? '' : this.integrationsForm.oAuthRedirectUri,
+      oAuthRedirectUri: this.integrationsForm.oAuthRedirectUri,
       ecosystemConfigUrl: this.integrationsForm.ecosystemConfigUrl
     }).subscribe({
       next: saved => {
         this.integrationsView.set(saved);
-        this.integrationsForm.youTubeApiKey = '';
-        this.integrationsForm.googleClientSecret = '';
-        this.integrationsForm.googleClientId = saved.googleClientId || '';
         this.integrationsForm.oAuthRedirectUri = saved.oAuthRedirectUri || '';
-        this.notify(
-          clearKey ? 'Saved YouTube API key removed.'
-            : clearOAuth ? 'Saved Google OAuth credentials removed.'
-            : 'Integration settings saved.'
-        );
+        this.notify('Per-app routing settings saved.');
       },
       error: err => this.notifyError('Failed to save integration settings', err)
     });

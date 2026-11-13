@@ -222,13 +222,15 @@ public sealed class SocialAnalyticsTests : IDisposable
         });
 
         Assert.True(view.HasYouTubeApiKey);
-        Assert.Equal("AIza••••••••1234", view.YouTubeApiKeyMasked);
+        Assert.Equal("••••1234", view.YouTubeApiKeyMasked);
+        Assert.DoesNotContain("AIza", view.YouTubeApiKeyMasked);
         Assert.DoesNotContain("ExampleSecret", view.YouTubeApiKeyMasked);
 
         Assert.True(view.HasGoogleClientSecret);
         Assert.True(view.IsYouTubeOAuthConfigured);
         Assert.Equal("123456.apps.googleusercontent.com", view.GoogleClientId);
-        Assert.Equal("GOCS••••••••9999", view.GoogleClientSecretMasked);
+        Assert.Equal("••••9999", view.GoogleClientSecretMasked);
+        Assert.DoesNotContain("GOCS", view.GoogleClientSecretMasked);
         Assert.DoesNotContain("MyVerySecret", view.GoogleClientSecretMasked);
     }
 

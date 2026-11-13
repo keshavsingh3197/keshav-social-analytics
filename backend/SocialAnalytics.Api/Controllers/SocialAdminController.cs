@@ -70,8 +70,8 @@ public class SocialAdminController : ControllerBase
         var target = channels.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
         if (target is null) return NotFound();
 
-        var secrets = await _configService.GetSecretsAsync();
-        await _youtubeFetch.EnrichChannelAsync(target, secrets.YouTubeApiKey, ct);
+        var apiKey = await _configService.GetEffectiveYouTubeApiKeyAsync();
+        await _youtubeFetch.EnrichChannelAsync(target, apiKey, ct);
         return Ok(await _analyticsService.UpsertChannelAsync(target));
     }
 

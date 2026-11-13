@@ -104,6 +104,11 @@ public class IntegrationSettingsView
     public string? GoogleClientId { get; set; }
     public string? OAuthRedirectUri { get; set; }
     public bool IsYouTubeOAuthConfigured { get; set; }
+    public bool ManagedByCentralAdmin { get; set; }
+    public bool CentralYouTubeApiKeyConfigured { get; set; }
+    public bool CentralGoogleOAuthConfigured { get; set; }
+    public bool CentralAdSenseConfigured { get; set; }
+    public string? AdSenseClientId { get; set; }
     public string EcosystemConfigUrl { get; set; } = string.Empty;
     public string AdminPortalUrl { get; set; } = string.Empty;
     public DateTime UpdatedAt { get; set; }
