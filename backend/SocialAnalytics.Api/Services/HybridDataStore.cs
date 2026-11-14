@@ -32,11 +32,11 @@ public sealed class HybridDataStore
         _dataDir = Path.Combine(env.ContentRootPath, "App_Data");
         Directory.CreateDirectory(_dataDir);
 
-        var connStr = configuration["Mongo:ConnectionString"]
-            ?? configuration["MongoDbSettings:ConnectionString"]
-            ?? configuration.GetConnectionString("Mongo");
+        var connStr = ResolveMongoConnectionString(configuration);
 
-        var dbName = configuration["Mongo:Database"]
+        var dbName = configuration["Mongo:DatabaseName"]
+            ?? configuration["Mongo:Database"]
+            ?? configuration["MongoDbSettings:DatabaseName"]
             ?? configuration["MongoDbSettings:Database"]
             ?? "SocialAnalyticsDb";
 
@@ -276,6 +276,19 @@ public sealed class HybridDataStore
         var json = JsonSerializer.Serialize(payload, JsonOptions);
         await File.WriteAllTextAsync(tmp, json);
         File.Move(tmp, path, overwrite: true);
+    }
+
+    internal static string? ResolveMongoConnectionString(IConfiguration configuration)
+    {
+        var candidates = new[]
+        {
+            configuration["Mongo:ConnectionString"],
+            configuration["Mongo:Uri"],
+            configuration["MongoDbSettings:ConnectionString"],
+            configuration.GetConnectionString("Mongo"),
+            configuration.GetConnectionString("MongoDb")
+        };
+        return candidates.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s))?.Trim();
     }
 
     private sealed class SeedMarker
