@@ -2,16 +2,18 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { finalize } from 'rxjs';
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { EcosystemConfigService } from '../../core/services/ecosystem-config.service';
 import { AuthService } from '../../core/services/auth.service';
 import { AdSlotComponent } from '../shared/ad-slot/ad-slot.component';
+import { LoadingStateComponent } from '../shared/loading/loading-state.component';
 import { FunnelCampaign, SiteConfig } from '../../core/models/analytics.models';
 
 @Component({
   selector: 'app-traffic-funnel',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, AdSlotComponent],
+  imports: [CommonModule, FormsModule, RouterLink, AdSlotComponent, LoadingStateComponent],
   template: `
     <div class="funnel-page">
       <div class="header-box">
@@ -55,8 +57,8 @@ import { FunnelCampaign, SiteConfig } from '../../core/models/analytics.models';
                   📋 Copy Link
                 </button>
               } @else if (auth.isAuthenticated()) {
-                <button (click)="createEcosystemCampaign(site.name + ' Funnel', site.url, 'yt-' + site.key)" class="btn-preset">
-                  Generate Link
+                <button (click)="createEcosystemCampaign(site.name + ' Funnel', site.url, 'yt-' + site.key)" class="btn-preset" [disabled]="creatingPresetSlug() === ('yt-' + site.key)">
+                  @if (creatingPresetSlug() === ('yt-' + site.key)) { <span class="btn-spin" aria-hidden="true"></span>Generating… } @else { Generate Link }
                 </button>
               } @else {
                 <a [href]="site.url" target="_blank" rel="noopener" class="btn-preset-link">Visit →</a>
@@ -89,7 +91,9 @@ import { FunnelCampaign, SiteConfig } from '../../core/models/analytics.models';
               (ngModelChange)="campaignDestination.set($event)"
               placeholder="Destination URL (https://...)" 
               class="f-input" />
-            <button (click)="submitCampaign()" class="btn-create">Create Funnel</button>
+            <button (click)="submitCampaign()" class="btn-create" [disabled]="creating()">
+              @if (creating()) { <span class="btn-spin" aria-hidden="true"></span>Creating… } @else { Create Funnel }
+            </button>
           </div>
           @if (statusMessage(); as msg) {
             <div class="status-toast">{{ msg }}</div>
@@ -117,50 +121,56 @@ import { FunnelCampaign, SiteConfig } from '../../core/models/analytics.models';
             <a routerLink="/admin" class="manage-link">Manage all funnels in Admin →</a>
           }
         </div>
-        <div class="table-wrap">
-          <table class="funnel-table">
-            <thead>
-              <tr>
-                <th>Campaign</th>
-                <th>Source Platform</th>
-                <th>Destination Target</th>
-                <th>Tracked Link</th>
-                <th>Clicks</th>
-                <th>Conversions</th>
-                <th>Conversion Rate</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (camp of campaigns(); track camp.id) {
+        @if (loadingCampaigns()) {
+          <app-loading-state variant="rows" [count]="3" label="Loading active traffic campaigns…" />
+        } @else {
+          <div class="table-wrap">
+            <table class="funnel-table">
+              <thead>
                 <tr>
-                  <td><strong>{{ camp.title }}</strong></td>
-                  <td><span class="source-tag">{{ camp.sourcePlatform }}</span></td>
-                  <td><a [href]="camp.destinationUrl" target="_blank" rel="noopener" class="dest-link">{{ camp.destinationUrl }}</a></td>
-                  <td>
-                    <a [routerLink]="['/t', camp.trackingSlug]" class="slug-link">
-                      <code class="slug-code">{{ trackingUrl(camp.trackingSlug) }}</code>
-                    </a>
-                  </td>
-                  <td><strong>{{ camp.totalClicks | number }}</strong></td>
-                  <td>{{ camp.conversions | number }}</td>
-                  <td>
-                    <span class="c-rate">{{ camp.conversionRatePercentage }}%</span>
-                  </td>
-                  <td>
-                    <div class="row-btns">
-                      <button (click)="copyLink(camp.trackingSlug)" class="btn-copy">📋 Copy</button>
-                      @if (auth.isAuthenticated()) {
-                        <button (click)="recordUserConversion(camp)" class="btn-copy conv">+1 Conv</button>
-                        <button (click)="deleteUserCampaign(camp)" class="btn-copy del">Delete</button>
-                      }
-                    </div>
-                  </td>
+                  <th>Campaign</th>
+                  <th>Source Platform</th>
+                  <th>Destination Target</th>
+                  <th>Tracked Link</th>
+                  <th>Clicks</th>
+                  <th>Conversions</th>
+                  <th>Conversion Rate</th>
+                  <th>Actions</th>
                 </tr>
-              }
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                @for (camp of campaigns(); track camp.id) {
+                  <tr>
+                    <td><strong>{{ camp.title }}</strong></td>
+                    <td><span class="source-tag">{{ camp.sourcePlatform }}</span></td>
+                    <td><a [href]="camp.destinationUrl" target="_blank" rel="noopener" class="dest-link">{{ camp.destinationUrl }}</a></td>
+                    <td>
+                      <a [routerLink]="['/t', camp.trackingSlug]" class="slug-link">
+                        <code class="slug-code">{{ trackingUrl(camp.trackingSlug) }}</code>
+                      </a>
+                    </td>
+                    <td><strong>{{ camp.totalClicks | number }}</strong></td>
+                    <td>{{ camp.conversions | number }}</td>
+                    <td>
+                      <span class="c-rate">{{ camp.conversionRatePercentage }}%</span>
+                    </td>
+                    <td>
+                      <div class="row-btns">
+                        <button (click)="copyLink(camp.trackingSlug)" class="btn-copy">📋 Copy</button>
+                        @if (auth.isAuthenticated()) {
+                          <button (click)="recordUserConversion(camp)" class="btn-copy conv" [disabled]="busyCampaignId() === camp.id">+1 Conv</button>
+                          <button (click)="deleteUserCampaign(camp)" class="btn-copy del" [disabled]="busyCampaignId() === camp.id">Delete</button>
+                        }
+                      </div>
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="8" style="text-align:center;color:#64748b;padding:1.25rem;">No traffic funnel campaigns yet.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
       </section>
 
       <!-- Video Description Template Generator -->
@@ -410,6 +420,10 @@ export class TrafficFunnelComponent implements OnInit {
   readonly siteConfig = signal<SiteConfig | null>(null);
   readonly promoSites = this.ecosystem.promoSiblingSites;
   readonly studioPortalUrl = this.ecosystem.studioPortalUrl;
+  readonly loadingCampaigns = signal(true);
+  readonly creating = signal(false);
+  readonly creatingPresetSlug = signal<string | null>(null);
+  readonly busyCampaignId = signal<string | null>(null);
   readonly campaignTitle = signal('');
   readonly campaignSource = signal('YouTube Description');
   readonly campaignDestination = signal('');
@@ -440,7 +454,10 @@ export class TrafficFunnelComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.analytics.getCampaigns().subscribe(c => this.campaigns.set(c));
+    this.loadingCampaigns.set(true);
+    this.analytics.getCampaigns()
+      .pipe(finalize(() => this.loadingCampaigns.set(false)))
+      .subscribe(c => this.campaigns.set(c));
     this.analytics.getSiteConfig().subscribe(cfg => {
       this.siteConfig.set(cfg);
       if (cfg?.defaultDestinationBaseUrl) {
@@ -467,7 +484,8 @@ export class TrafficFunnelComponent implements OnInit {
     const title = this.campaignTitle().trim();
     const destinationUrl = this.campaignDestination().trim();
     const sourcePlatform = this.campaignSource().trim() || 'YouTube Description';
-    if (!title || !destinationUrl) return;
+    if (!title || !destinationUrl || this.creating()) return;
+    this.creating.set(true);
 
     const payload: FunnelCampaign = {
       title,
@@ -480,7 +498,9 @@ export class TrafficFunnelComponent implements OnInit {
       isActive: true
     };
 
-    this.analytics.createCampaign(payload).subscribe({
+    this.analytics.createCampaign(payload)
+      .pipe(finalize(() => this.creating.set(false)))
+      .subscribe({
       next: (camp) => {
         this.campaigns.update(list => [camp, ...list]);
         this.campaignTitle.set('');
@@ -499,6 +519,8 @@ export class TrafficFunnelComponent implements OnInit {
   createEcosystemCampaign(title: string, destination: string, slug: string): void {
     const existing = this.campaigns().find(c => c.trackingSlug === slug);
     if (!existing) {
+      if (this.creatingPresetSlug()) return;
+      this.creatingPresetSlug.set(slug);
       this.analytics.createCampaign({
         title,
         sourcePlatform: 'YouTube / Instagram',
@@ -508,7 +530,7 @@ export class TrafficFunnelComponent implements OnInit {
         conversions: 0,
         conversionRatePercentage: 0,
         isActive: true
-      }).subscribe({
+      }).pipe(finalize(() => this.creatingPresetSlug.set(null))).subscribe({
         next: (c) => {
           this.campaigns.update(list => [c, ...list]);
           this.copyLink(c.trackingSlug);
@@ -527,23 +549,29 @@ export class TrafficFunnelComponent implements OnInit {
   }
 
   recordUserConversion(camp: FunnelCampaign): void {
-    if (!camp.id) return;
-    this.analytics.recordUserConversion(camp.id).subscribe({
-      next: (updated) => {
-        this.campaigns.update(list => list.map(c => c.id === updated.id ? updated : c));
-        this.showStatus(`Recorded conversion for "${camp.title}"`);
-      }
-    });
+    if (!camp.id || this.busyCampaignId()) return;
+    this.busyCampaignId.set(camp.id);
+    this.analytics.recordUserConversion(camp.id)
+      .pipe(finalize(() => this.busyCampaignId.set(null)))
+      .subscribe({
+        next: (updated) => {
+          this.campaigns.update(list => list.map(c => c.id === updated.id ? updated : c));
+          this.showStatus(`Recorded conversion for "${camp.title}"`);
+        }
+      });
   }
 
   deleteUserCampaign(camp: FunnelCampaign): void {
-    if (!camp.id) return;
-    this.analytics.deleteUserCampaign(camp.id).subscribe({
-      next: () => {
-        this.campaigns.update(list => list.filter(c => c.id !== camp.id));
-        this.showStatus(`Removed funnel "${camp.title}"`);
-      }
-    });
+    if (!camp.id || this.busyCampaignId()) return;
+    this.busyCampaignId.set(camp.id);
+    this.analytics.deleteUserCampaign(camp.id)
+      .pipe(finalize(() => this.busyCampaignId.set(null)))
+      .subscribe({
+        next: () => {
+          this.campaigns.update(list => list.filter(c => c.id !== camp.id));
+          this.showStatus(`Removed funnel "${camp.title}"`);
+        }
+      });
   }
 
   copySnippet(): void {

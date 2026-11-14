@@ -6,6 +6,7 @@ import { AnalyticsService } from '../../core/services/analytics.service';
 import { AuthService } from '../../core/services/auth.service';
 import { EcosystemConfigService } from '../../core/services/ecosystem-config.service';
 import { AdSlotComponent } from '../shared/ad-slot/ad-slot.component';
+import { LoadingStateComponent } from '../shared/loading/loading-state.component';
 import {
   AiPromptTemplate,
   ChannelAuditResult,
@@ -18,7 +19,7 @@ import {
 @Component({
   selector: 'app-channel-advisor',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, AdSlotComponent],
+  imports: [CommonModule, FormsModule, RouterModule, AdSlotComponent, LoadingStateComponent],
   template: `
     <div class="advisor-page">
       <div class="header-box">
@@ -34,7 +35,7 @@ import {
             <div class="header-cta-group">
               @if (auth.isAuthenticated() && audit.snapshot) {
                 <button type="button" class="btn-outline" (click)="saveCurrentToWorkspace()" [disabled]="savingChannel()">
-                  {{ savingChannel() ? 'Saving...' : '+ Save to My Channels' }}
+                  @if (savingChannel()) { <span class="btn-spin" aria-hidden="true"></span>Saving... } @else { + Save to My Channels }
                 </button>
               }
               <a routerLink="/funnel" class="btn-outline">🔗 Build Funnel Link</a>
@@ -79,11 +80,15 @@ import {
               <option value="LinkedIn">LinkedIn</option>
             </select>
             <button type="button" (click)="runAudit(true)" [disabled]="auditing()" class="btn-audit">
-              {{ auditing() ? 'Auditing Live...' : '🔍 Run Growth Audit' }}
+              @if (auditing()) { <span class="btn-spin" aria-hidden="true"></span>Auditing Live... } @else { 🔍 Run Growth Audit }
             </button>
           </div>
         </div>
       </div>
+
+      @if (!auditResult()) {
+        <app-loading-state variant="audit" label="Analyzing channel performance &amp; generating growth plan…" />
+      }
 
       @if (auditResult(); as audit) {
         <!-- Audit Score Overview & Snapshot -->

@@ -1,11 +1,13 @@
 import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { finalize } from 'rxjs';
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { EcosystemConfigService } from '../../core/services/ecosystem-config.service';
 import { AuthService } from '../../core/services/auth.service';
 import { AdSlotComponent } from '../shared/ad-slot/ad-slot.component';
 import { ChannelAnalyzerComponent } from '../shared/channel-analyzer/channel-analyzer.component';
+import { LoadingStateComponent } from '../shared/loading/loading-state.component';
 import {
   ChannelMetrics,
   PlatformSummary,
@@ -17,7 +19,7 @@ import {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, AdSlotComponent, ChannelAnalyzerComponent],
+  imports: [CommonModule, RouterLink, AdSlotComponent, ChannelAnalyzerComponent, LoadingStateComponent],
   template: `
     <div class="dashboard-page">
       @if (adminDenied()) {
@@ -82,11 +84,11 @@ import {
             <span class="stat-label">{{ auth.isAuthenticated() && channels().length > 0 ? 'My Total Audience' : 'Analyzed Subscribers' }}</span>
           </div>
           <div class="stat-pill">
-            <span class="stat-num">{{ activeVideoCount() }}</span>
+            <span class="stat-num">{{ loading() ? '…' : activeVideoCount() }}</span>
             <span class="stat-label">Recent Videos Loaded</span>
           </div>
           <div class="stat-pill accent">
-            <span class="stat-num">\${{ totalRevenue() | number:'1.0-0' }}</span>
+            <span class="stat-num">{{ loading() ? '…' : ('$' + (totalRevenue() | number:'1.0-0')) }}</span>
             <span class="stat-label">Est. Monthly RPM Rev</span>
           </div>
         </div>
@@ -143,6 +145,10 @@ import {
             <button type="button" (click)="auth.loginRedirect()" class="btn btn-primary">Sign in with SSO</button>
           </div>
         </section>
+      }
+
+      @if (auth.isAuthenticated() && loading() && channels().length === 0) {
+        <app-loading-state variant="cards" [count]="3" label="Loading workspace channels & live analytics…" />
       }
 
       @if (auth.isAuthenticated() && !loading() && channels().length === 0) {
@@ -314,7 +320,7 @@ import {
             @for (vid of recentVideos().slice(0, 8); track vid.videoId) {
               <a [href]="vid.url" target="_blank" rel="noopener" class="video-card">
                 <div class="thumb-wrap">
-                  <img [src]="vid.thumbnailUrl" [alt]="vid.title" loading="lazy" />
+                  <img [src]="vid.thumbnailUrl" [alt]="vid.title" loading="lazy" decoding="async" />
                   <span class="views-badge">👁 {{ vid.views | number }}</span>
                 </div>
                 <div class="video-body">
@@ -848,11 +854,11 @@ export class DashboardComponent implements OnInit {
   }
 
   private loadWorkspaceData(): void {
+    this.loading.set(true);
     this.analytics.getChannels().subscribe(ch => this.channels.set(ch));
-    this.analytics.getOverview().subscribe(ov => {
-      this.platformSummaries.set(ov);
-      this.loading.set(false);
-    });
+    this.analytics.getOverview()
+      .pipe(finalize(() => this.loading.set(false)))
+      .subscribe(ov => this.platformSummaries.set(ov));
     this.analytics.getRecentVideos(12).subscribe(v => this.recentVideos.set(v));
   }
 

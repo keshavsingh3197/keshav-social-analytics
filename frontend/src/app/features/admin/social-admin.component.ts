@@ -1,9 +1,11 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { finalize } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { EcosystemConfigService } from '../../core/services/ecosystem-config.service';
+import { LoadingStateComponent } from '../shared/loading/loading-state.component';
 import {
   AdMonetizationConfig,
   AdminStatus,
@@ -22,7 +24,7 @@ type AdminTab = 'channels' | 'funnels' | 'growth' | 'earnings' | 'site';
 @Component({
   selector: 'app-social-admin',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, LoadingStateComponent],
   template: `
     <div class="admin-page">
       @if (!auth.isAdmin()) {
@@ -61,6 +63,10 @@ type AdminTab = 'channels' | 'funnels' | 'growth' | 'earnings' | 'site';
           </div>
         }
 
+        @if (loadingData()) {
+          <app-loading-state variant="rows" [count]="3" label="Loading Admin Console metrics & funnels…" />
+        }
+
         <!-- Tab Switcher -->
         <nav class="tab-bar">
           <button [class.active]="activeTab() === 'channels'" (click)="activeTab.set('channels')">
@@ -92,7 +98,7 @@ type AdminTab = 'channels' | 'funnels' | 'growth' | 'earnings' | 'site';
               </div>
               <div class="btn-row">
                 <button (click)="runSyncEcosystem(true)" [disabled]="syncing()" class="btn-primary">
-                  {{ syncing() ? '⏳ Syncing…' : '🔄 Sync Central Channels & YouTube Feeds' }}
+                  @if (syncing()) { <span class="btn-spin" aria-hidden="true"></span>Syncing… } @else { 🔄 Sync Central Channels &amp; YouTube Feeds }
                 </button>
                 <button (click)="runRefreshYouTube()" [disabled]="syncing()" class="btn-secondary">
                   📺 Refresh All YouTube Live
@@ -651,6 +657,7 @@ export class SocialAdminComponent implements OnInit {
   readonly status = signal<AdminStatus | null>(null);
   readonly feedback = signal<{ message: string; isError: boolean } | null>(null);
   readonly syncing = signal(false);
+  readonly loadingData = signal(false);
   readonly integrationsView = signal<IntegrationSettingsView | null>(null);
 
   readonly channels = signal<ChannelMetrics[]>([]);
@@ -689,23 +696,29 @@ export class SocialAdminComponent implements OnInit {
   }
 
   private loadAll(): void {
-    this.analytics.getAdminStatus().subscribe({
+    let pending = 8;
+    const done = () => {
+      pending -= 1;
+      if (pending <= 0) this.loadingData.set(false);
+    };
+    this.loadingData.set(true);
+    this.analytics.getAdminStatus().pipe(finalize(done)).subscribe({
       next: s => this.status.set(s),
       error: err => this.notifyError('Failed to verify Admin API session', err)
     });
-    this.analytics.getAdminChannels().subscribe({
+    this.analytics.getAdminChannels().pipe(finalize(done)).subscribe({
       next: list => this.channels.set(list),
       error: err => this.notifyError('Failed to load channels', err)
     });
-    this.analytics.getAdminFunnels().subscribe({
+    this.analytics.getAdminFunnels().pipe(finalize(done)).subscribe({
       next: list => this.funnels.set(list),
       error: err => this.notifyError('Failed to load funnels', err)
     });
-    this.analytics.getAdminSuggestions().subscribe({
+    this.analytics.getAdminSuggestions().pipe(finalize(done)).subscribe({
       next: list => this.suggestions.set(list),
       error: err => this.notifyError('Failed to load recommendations', err)
     });
-    this.analytics.getIntegrations().subscribe({
+    this.analytics.getIntegrations().pipe(finalize(done)).subscribe({
       next: v => {
         this.integrationsView.set(v);
         this.integrationsForm.ecosystemConfigUrl = v.ecosystemConfigUrl || 'https://id.keshavsingh.in/api/config';
@@ -713,12 +726,12 @@ export class SocialAdminComponent implements OnInit {
       },
       error: err => this.notifyError('Failed to load integrations status', err)
     });
-    this.analytics.getGrowthConfig().subscribe(cfg => {
+    this.analytics.getGrowthConfig().pipe(finalize(done)).subscribe(cfg => {
       this.growthConfigForm = cfg;
       this.keywordsCsv = (cfg.highDemandKeywords || []).join(', ');
       this.uploadTimeEntries = Object.entries(cfg.bestUploadTimes || {}).map(([platform, window]) => ({ platform, window }));
     });
-    this.analytics.getEarningsConfig().subscribe(cfg => {
+    this.analytics.getEarningsConfig().pipe(finalize(done)).subscribe(cfg => {
       this.earningsForm = {
         ...cfg,
         platformBenchmarks: cfg.platformBenchmarks.map(x => ({ ...x })),
@@ -726,7 +739,7 @@ export class SocialAdminComponent implements OnInit {
         opportunities: cfg.opportunities.map(x => ({ ...x }))
       };
     });
-    this.analytics.getSiteConfig().subscribe(cfg => {
+    this.analytics.getSiteConfig().pipe(finalize(done)).subscribe(cfg => {
       this.siteForm = { ...cfg };
       this.adsForm = { ...this.emptyAds(), ...(cfg.ads || {}) };
     });

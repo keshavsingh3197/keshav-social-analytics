@@ -12,8 +12,57 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <meta name="google-adsense-account" content="ca-pub-7890828429175364">
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7890828429175364" crossorigin="anonymous"></script>
+  <style>
+    #boot-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.9rem;
+      background: #0f172a;
+      color: #f8fafc;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      transition: opacity 0.22s ease;
+    }
+    #boot-loader.hidden { opacity: 0; pointer-events: none; }
+    #boot-loader .boot-badge {
+      width: 58px;
+      height: 58px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%);
+      color: #ffffff;
+      display: grid;
+      place-items: center;
+      font-size: 1.45rem;
+      font-weight: 800;
+      box-shadow: 0 12px 28px rgba(37, 99, 235, 0.35);
+    }
+    #boot-loader .boot-ring {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      border: 3px solid rgba(56, 189, 248, 0.22);
+      border-top-color: #38bdf8;
+      animation: social-boot-spin 0.75s linear infinite;
+    }
+    #boot-loader p {
+      margin: 0;
+      font-size: 0.9rem;
+      color: #cbd5e1;
+      font-weight: 600;
+    }
+    @keyframes social-boot-spin { to { transform: rotate(360deg); } }
+  </style>
 </head>
 <body>
+  <div id="boot-loader" role="status" aria-live="polite">
+    <div class="boot-badge" aria-hidden="true">SP</div>
+    <div class="boot-ring" aria-hidden="true"></div>
+    <p>Loading SocialPulse Analytics…</p>
+  </div>
   <app-root></app-root>
 </body>
 </html>
