@@ -1,8 +1,10 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { finalize } from 'rxjs';
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { AdSlotComponent } from '../shared/ad-slot/ad-slot.component';
+import { LoadingStateComponent } from '../shared/loading/loading-state.component';
 import {
   ChannelMetrics,
   EarningsCalculationRequest,
@@ -14,7 +16,7 @@ import {
 @Component({
   selector: 'app-earnings-calculator',
   standalone: true,
-  imports: [CommonModule, FormsModule, AdSlotComponent],
+  imports: [CommonModule, FormsModule, AdSlotComponent, LoadingStateComponent],
   template: `
     <div class="calculator-page">
       <div class="header-box">
@@ -24,6 +26,10 @@ import {
           brand sponsorships, and website referral affiliate earnings in seconds.
         </p>
       </div>
+
+      @if (loadingConfig() && !config()) {
+        <app-loading-state variant="rows" [count]="2" label="Loading RPM benchmarks &amp; creator presets…" />
+      }
 
       <div class="handle-autofill-bar">
         <span class="preset-lbl">🔍 Auto-fill from any &#64;handle or Channel URL:</span>
@@ -35,7 +41,7 @@ import {
             placeholder="Enter @handle or YouTube URL (e.g. @mkbhd)"
             class="form-input autofill-input" />
           <button type="submit" class="btn-autofill" [disabled]="lookingUp() || !lookupHandle.trim()">
-            {{ lookingUp() ? 'Fetching...' : '⚡ Fetch Stats' }}
+            @if (lookingUp()) { <span class="btn-spin" aria-hidden="true"></span>Fetching... } @else { ⚡ Fetch Stats }
           </button>
         </form>
         @if (activeChannelLabel()) {
@@ -464,6 +470,7 @@ export class EarningsCalculatorComponent implements OnInit {
   private analytics = inject(AnalyticsService);
 
   readonly config = signal<EarningsConfig | null>(null);
+  readonly loadingConfig = signal(true);
   readonly channels = signal<ChannelMetrics[]>([]);
   readonly benchmarks = computed(() => this.config()?.platformBenchmarks ?? []);
   readonly niches = computed(() => this.config()?.niches ?? []);
@@ -487,8 +494,11 @@ export class EarningsCalculatorComponent implements OnInit {
   readonly report = signal<EarningsReport | null>(null);
 
   ngOnInit(): void {
+    this.loadingConfig.set(true);
     this.analytics.getChannels().subscribe(chs => this.channels.set(chs));
-    this.analytics.getEarningsConfig().subscribe(cfg => {
+    this.analytics.getEarningsConfig()
+      .pipe(finalize(() => this.loadingConfig.set(false)))
+      .subscribe(cfg => {
       this.config.set(cfg);
       const active = this.analytics.activeLookup();
       if (active) {

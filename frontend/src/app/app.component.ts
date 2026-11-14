@@ -3,6 +3,7 @@ import { RouterOutlet } from '@angular/router';
 import { EcosystemBarComponent } from './features/shared/ecosystem-bar/ecosystem-bar.component';
 import { HeaderComponent } from './features/shared/header/header.component';
 import { AdSlotComponent } from './features/shared/ad-slot/ad-slot.component';
+import { GlobalLoaderComponent } from './features/shared/loading/global-loader.component';
 import { AnalyticsService } from './core/services/analytics.service';
 import { AuthService } from './core/services/auth.service';
 import { EcosystemConfigService } from './core/services/ecosystem-config.service';
@@ -10,8 +11,9 @@ import { EcosystemConfigService } from './core/services/ecosystem-config.service
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, EcosystemBarComponent, HeaderComponent, AdSlotComponent],
+  imports: [RouterOutlet, EcosystemBarComponent, HeaderComponent, AdSlotComponent, GlobalLoaderComponent],
   template: `
+    <app-global-loader />
     <app-ecosystem-bar />
     <app-header />
     <main class="main-content">

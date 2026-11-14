@@ -49,7 +49,7 @@ import { AuthService } from '../../../core/services/auth.service';
               @for (cand of searchCandidates(); track cand.externalChannelId + cand.channelHandle) {
                 <button type="button" class="candidate-item" (click)="selectCandidate(cand)">
                   @if (cand.avatarUrl) {
-                    <img [src]="cand.avatarUrl" [alt]="cand.channelName" class="cand-avatar" />
+                    <img [src]="cand.avatarUrl" [alt]="cand.channelName" class="cand-avatar" loading="lazy" decoding="async" />
                   } @else {
                     <div class="cand-avatar fallback">{{ getPlatformIcon(cand.platform) }}</div>
                   }
@@ -72,7 +72,7 @@ import { AuthService } from '../../../core/services/auth.service';
           class="form-input niche-input" />
 
         <button type="submit" class="btn-analyze" [disabled]="analyzing() || !lookupQuery.trim()">
-          {{ analyzing() ? 'Analyzing...' : '⚡ Analyze Live' }}
+          @if (analyzing()) { <span class="btn-spin" aria-hidden="true"></span>Analyzing... } @else { ⚡ Analyze Live }
         </button>
       </form>
 
@@ -85,7 +85,7 @@ import { AuthService } from '../../../core/services/auth.service';
           <div class="lookup-header">
             <div class="channel-cell">
               @if (res.channel.avatarUrl) {
-                <img [src]="res.channel.avatarUrl" [alt]="res.channel.channelName" class="ch-avatar" />
+                <img [src]="res.channel.avatarUrl" [alt]="res.channel.channelName" class="ch-avatar" loading="lazy" decoding="async" />
               } @else {
                 <div class="ch-avatar fallback">{{ getPlatformIcon(res.channel.platform) }}</div>
               }
@@ -113,7 +113,7 @@ import { AuthService } from '../../../core/services/auth.service';
                 class="btn-mini">🚀 Full Growth Audit</a>
               @if (auth.isAuthenticated()) {
                 <button type="button" class="btn-mini save" (click)="saveAnalyzedChannel()" [disabled]="savingChannel()">
-                  {{ savingChannel() ? 'Saving...' : '+ Save to My Channels' }}
+                  @if (savingChannel()) { <span class="btn-spin" aria-hidden="true"></span>Saving... } @else { + Save to My Channels }
                 </button>
               } @else {
                 <button type="button" class="btn-mini" (click)="auth.loginRedirect()">🔐 Sign in to Save</button>

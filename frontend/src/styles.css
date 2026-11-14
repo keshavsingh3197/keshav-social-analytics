@@ -38,3 +38,19 @@ button {
 code {
   font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
 }
+
+.btn-spin {
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: currentColor;
+  animation: social-btn-spin 0.7s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 0.35rem;
+}
+
+@keyframes social-btn-spin {
+  to { transform: rotate(360deg); }
+}
