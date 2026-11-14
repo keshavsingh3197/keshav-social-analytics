@@ -16,19 +16,19 @@ export class EcosystemConfigService {
 
   readonly ecosystemBarSites = computed(() =>
     this.websites()
-      .filter(w => w.showInEcosystemBar !== false)
+      .filter(w => w.showInEcosystemBar !== false && !['blog', 'blog-admin', 'admin', 'ghar-ledger'].includes((w.key || '').toLowerCase()))
       .sort((a, b) => a.sortOrder - b.sortOrder)
   );
 
   readonly promoSiblingSites = computed(() =>
     this.websites()
-      .filter(w => w.key !== 'social' && w.key !== 'admin' && w.key !== 'blog-admin')
+      .filter(w => !['social', 'admin', 'blog', 'blog-admin', 'ghar-ledger'].includes((w.key || '').toLowerCase()))
       .sort((a, b) => a.sortOrder - b.sortOrder)
   );
 
   readonly footerSites = computed(() =>
     this.websites()
-      .filter(w => w.showInEcosystemBar !== false && w.key !== 'blog-admin')
+      .filter(w => w.showInEcosystemBar !== false && !['blog', 'blog-admin', 'admin', 'ghar-ledger'].includes((w.key || '').toLowerCase()))
       .sort((a, b) => a.sortOrder - b.sortOrder)
   );
 
