@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { AuthService } from '../../core/services/auth.service';
+import { EcosystemConfigService } from '../../core/services/ecosystem-config.service';
 import { AdSlotComponent } from '../shared/ad-slot/ad-slot.component';
 import {
   AiPromptTemplate,
@@ -37,6 +38,9 @@ import {
                 </button>
               }
               <a routerLink="/funnel" class="btn-outline">🔗 Build Funnel Link</a>
+              @if (studioPortalUrl(); as studioUrl) {
+                <a [href]="studioUrl + '/automation'" target="_blank" rel="noopener" class="btn-outline">⚡ Auto-Post Studio →</a>
+              }
             </div>
           }
         </div>
@@ -562,8 +566,11 @@ import {
 export class ChannelAdvisorComponent implements OnInit {
   private analytics = inject(AnalyticsService);
   readonly auth = inject(AuthService);
+  private ecosystem = inject(EcosystemConfigService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+
+  readonly studioPortalUrl = this.ecosystem.studioPortalUrl;
 
   readonly channels = signal<ChannelMetrics[]>([]);
   readonly selectedHandle = signal('');
@@ -594,6 +601,7 @@ export class ChannelAdvisorComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    this.ecosystem.load();
     const qHandle = this.route.snapshot.queryParamMap.get('handle')?.trim() ?? '';
     const qPlatform = (this.route.snapshot.queryParamMap.get('platform')?.trim() as SocialPlatform) || 'YouTube';
     const active = this.analytics.activeLookup();

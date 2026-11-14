@@ -68,6 +68,10 @@ export class EcosystemConfigService {
     'https://admin.keshavsingh.in'
   );
 
+  readonly studioPortalUrl = computed(() =>
+    this.websites().find(w => w.key === 'studio')?.url || ''
+  );
+
   load(): void {
     if (!this.loadOnce$) {
       const configUrl = `${environment.idpUrl}/config`;

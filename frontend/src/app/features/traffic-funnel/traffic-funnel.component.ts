@@ -15,11 +15,20 @@ import { FunnelCampaign, SiteConfig } from '../../core/models/analytics.models';
   template: `
     <div class="funnel-page">
       <div class="header-box">
-        <h1>🎯 Traffic Funnel & Link Conversion Engine</h1>
-        <p>
-          Convert video viewers and social visitors into tracked website sessions and conversions.
-          Each signed-in creator manages their own private campaigns and short tracking URLs (<code>/t/...</code>).
-        </p>
+        <div class="header-box-row">
+          <div>
+            <h1>🎯 Traffic Funnel & Link Conversion Engine</h1>
+            <p>
+              Convert video viewers and social visitors into tracked website sessions and conversions.
+              Each signed-in creator manages their own private campaigns and short tracking URLs (<code>/t/...</code>).
+            </p>
+          </div>
+          @if (studioPortalUrl(); as studioUrl) {
+            <a [href]="studioUrl + '/automation'" target="_blank" rel="noopener" class="btn-studio-auto">
+              ⚡ Open Daily Auto-Post Studio →
+            </a>
+          }
+        </div>
       </div>
 
       <!-- Quick Funnel Presets -->
@@ -174,6 +183,18 @@ import { FunnelCampaign, SiteConfig } from '../../core/models/analytics.models';
       flex-direction: column;
       gap: 1.75rem;
     }
+    .header-box-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+    .btn-studio-auto {
+      background: #0f172a;
+      color: #ffffff;
+      padding: 0.55rem 1rem;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .btn-studio-auto:hover { background: #1e293b; }
     .header-box h1 {
       font-size: 1.9rem;
       font-weight: 800;
@@ -388,6 +409,7 @@ export class TrafficFunnelComponent implements OnInit {
   readonly campaigns = signal<FunnelCampaign[]>([]);
   readonly siteConfig = signal<SiteConfig | null>(null);
   readonly promoSites = this.ecosystem.promoSiblingSites;
+  readonly studioPortalUrl = this.ecosystem.studioPortalUrl;
   readonly campaignTitle = signal('');
   readonly campaignSource = signal('YouTube Description');
   readonly campaignDestination = signal('');
