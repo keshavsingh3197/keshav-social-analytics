@@ -5,6 +5,11 @@ import { finalize } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { EcosystemConfigService } from '../../core/services/ecosystem-config.service';
+import {
+  LocaleService,
+  SiteLocalizationAdminState,
+  SiteLocalizationConfigDto
+} from '../../core/services/locale.service';
 import { LoadingStateComponent } from '../shared/loading/loading-state.component';
 import {
   AdMonetizationConfig,
@@ -81,7 +86,7 @@ type AdminTab = 'channels' | 'funnels' | 'growth' | 'earnings' | 'site';
           <button [class.active]="activeTab() === 'earnings'" (click)="activeTab.set('earnings')">
             💰 Earnings Benchmarks
           </button>
-          <button [class.active]="activeTab() === 'site'" (click)="activeTab.set('site')">
+          <button [class.active]="activeTab() === 'site'" (click)="openSiteTab()">
             ⚙️ Site &amp; Global Ecosystem
           </button>
         </nav>
@@ -574,6 +579,69 @@ type AdminTab = 'channels' | 'funnels' | 'growth' | 'earnings' | 'site';
             </div>
 
             <hr class="divider" />
+            <h2>🌐 Language &amp; Localization Policy (Central Admin / Per-Site Override)</h2>
+            <p class="muted">
+              Defaults and enabled languages come from Central Admin DB (<code>social</code>).
+              Enable a per-site override here to enforce English-only, Hindi-only, or custom switcher rules for SocialPulse.
+            </p>
+            @if (locAdminState(); as st) {
+              <div class="global-summary">
+                <div><strong>Central Admin Policy:</strong> {{ st.centralAdminPolicy.defaultLocale.toUpperCase() }} ({{ st.centralAdminPolicy.enabledLocales.join(', ') }})</div>
+                <div><strong>Effective Now:</strong> {{ st.effectivePolicy.defaultLocale.toUpperCase() }} • Controlled by: <code>{{ st.effectivePolicy.controlledBy }}</code></div>
+              </div>
+            }
+            <div class="form-grid">
+              <div class="field field-wide">
+                <label class="chk">
+                  <input type="checkbox" [(ngModel)]="locForm.overrideCentralLocalization" />
+                  <span>Override Central Admin localization policy on SocialPulse</span>
+                </label>
+              </div>
+              <div class="field">
+                <label>Site Default Language</label>
+                <select [(ngModel)]="locForm.defaultLocale" [disabled]="!locForm.overrideCentralLocalization">
+                  <option value="en">English (en - Default)</option>
+                  <option value="hi">हिन्दी (Hindi)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Enabled Languages</label>
+                <div style="display:flex;gap:1rem;padding-top:0.35rem;">
+                  <label class="chk">
+                    <input type="checkbox" [checked]="hasLocLocale('en')" [disabled]="!locForm.overrideCentralLocalization" (change)="toggleLocLocale('en', $event)" />
+                    <span>English (en)</span>
+                  </label>
+                  <label class="chk">
+                    <input type="checkbox" [checked]="hasLocLocale('hi')" [disabled]="!locForm.overrideCentralLocalization" (change)="toggleLocLocale('hi', $event)" />
+                    <span>हिन्दी (hi)</span>
+                  </label>
+                </div>
+              </div>
+              <div class="field field-wide" style="display:flex;flex-wrap:wrap;gap:1.25rem;">
+                <label class="chk">
+                  <input type="checkbox" [(ngModel)]="locForm.showLanguagePicker" [disabled]="!locForm.overrideCentralLocalization" />
+                  <span>Show header language switcher</span>
+                </label>
+                <label class="chk">
+                  <input type="checkbox" [(ngModel)]="locForm.allowVisitorLanguageSwitch" [disabled]="!locForm.overrideCentralLocalization" />
+                  <span>Allow visitors to switch language</span>
+                </label>
+                <label class="chk">
+                  <input type="checkbox" [(ngModel)]="locForm.forceLocale" [disabled]="!locForm.overrideCentralLocalization" />
+                  <span>Force default language (lock out visitors)</span>
+                </label>
+              </div>
+            </div>
+            <div class="btn-row">
+              <button type="button" (click)="saveLocalizationPolicy()" [disabled]="locSaving()" class="btn-primary">
+                {{ locSaving() ? 'Saving...' : '💾 Save Language & Localization Policy' }}
+              </button>
+              <a [href]="ecosystem.adminPortalUrl() + '/website'" target="_blank" rel="noopener" class="btn-secondary link-btn">
+                Edit Central Website Defaults →
+              </a>
+            </div>
+
+            <hr class="divider" />
             <h2>Central Global Configuration (Read Live from Central Admin)</h2>
             <p class="muted">
               Global creator identity, creator channels, ecosystem navigation links, and copyright footer notice are centrally stored in
@@ -652,6 +720,18 @@ export class SocialAdminComponent implements OnInit {
   readonly auth = inject(AuthService);
   private analytics = inject(AnalyticsService);
   readonly ecosystem = inject(EcosystemConfigService);
+  readonly locale = inject(LocaleService);
+
+  readonly locAdminState = signal<SiteLocalizationAdminState | null>(null);
+  readonly locSaving = signal(false);
+  locForm: SiteLocalizationConfigDto = {
+    overrideCentralLocalization: false,
+    defaultLocale: 'en',
+    enabledLocales: ['en', 'hi'],
+    allowVisitorLanguageSwitch: true,
+    showLanguagePicker: true,
+    forceLocale: false
+  };
 
   readonly activeTab = signal<AdminTab>('channels');
   readonly status = signal<AdminStatus | null>(null);
@@ -940,6 +1020,61 @@ export class SocialAdminComponent implements OnInit {
   }
 
   // ---- Site Config ----
+  openSiteTab(): void {
+    this.activeTab.set('site');
+    this.loadLocalizationState();
+  }
+
+  loadLocalizationState(): void {
+    this.locale.getSiteLocalizationAdminState().subscribe({
+      next: state => {
+        this.locAdminState.set(state);
+        this.locForm = {
+          overrideCentralLocalization: !!state.localSettings.overrideCentralLocalization,
+          defaultLocale: state.localSettings.defaultLocale || 'en',
+          enabledLocales: [...(state.localSettings.enabledLocales?.length ? state.localSettings.enabledLocales : ['en', 'hi'])],
+          allowVisitorLanguageSwitch: state.localSettings.allowVisitorLanguageSwitch,
+          showLanguagePicker: state.localSettings.showLanguagePicker,
+          forceLocale: state.localSettings.forceLocale
+        };
+      },
+      error: err => this.notifyError('Failed to load localization policy', err)
+    });
+  }
+
+  hasLocLocale(code: string): boolean {
+    return (this.locForm.enabledLocales || []).includes(code);
+  }
+
+  toggleLocLocale(code: string, ev: Event): void {
+    const checked = (ev.target as HTMLInputElement).checked;
+    const next = new Set(this.locForm.enabledLocales || []);
+    if (checked) {
+      next.add(code);
+    } else if (next.size > 1) {
+      next.delete(code);
+    }
+    this.locForm.enabledLocales = Array.from(next);
+    if (!this.locForm.enabledLocales.includes(this.locForm.defaultLocale)) {
+      this.locForm.defaultLocale = (this.locForm.enabledLocales[0] as 'en' | 'hi') || 'en';
+    }
+  }
+
+  saveLocalizationPolicy(): void {
+    this.locSaving.set(true);
+    this.locale.updateSiteLocalization(this.locForm).subscribe({
+      next: state => {
+        this.locAdminState.set(state);
+        this.locSaving.set(false);
+        this.notify('SocialPulse language & localization policy saved.');
+      },
+      error: err => {
+        this.locSaving.set(false);
+        this.notifyError('Failed to save localization policy', err);
+      }
+    });
+  }
+
   saveSiteConfig(): void {
     this.analytics.saveSiteConfig({ ...this.siteForm, ads: { ...this.adsForm } }).subscribe({
       next: saved => {

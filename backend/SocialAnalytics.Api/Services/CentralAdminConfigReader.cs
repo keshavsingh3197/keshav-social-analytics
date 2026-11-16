@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
+using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
+using SocialAnalytics.Api.Models;
 
 namespace SocialAnalytics.Api.Services;
 
@@ -24,6 +26,7 @@ public sealed class CentralAdminConfigReader
     private const int HeaderSize = 2;
 
     private readonly IMongoCollection<CentralAppSettingsDocument>? _collection;
+    private readonly IMongoCollection<BsonDocument>? _videoCatalogCollection;
     private readonly string _documentId;
     private readonly byte _currentKeyId;
     private readonly IReadOnlyDictionary<byte, byte[]> _keys;
@@ -60,7 +63,9 @@ public sealed class CentralAdminConfigReader
             settings.ServerSelectionTimeout = TimeSpan.FromSeconds(5);
             settings.ConnectTimeout = TimeSpan.FromSeconds(5);
             var client = new MongoClient(settings);
-            _collection = client.GetDatabase(dbName).GetCollection<CentralAppSettingsDocument>(colName);
+            var db = client.GetDatabase(dbName);
+            _collection = db.GetCollection<CentralAppSettingsDocument>(colName);
+            _videoCatalogCollection = db.GetCollection<BsonDocument>("channel_videos");
         }
         catch (Exception ex)
         {
@@ -130,6 +135,82 @@ public sealed class CentralAdminConfigReader
     }
 
     internal void InvalidateCache() => _cacheExpiresAtUtc = DateTime.MinValue;
+
+    /// <summary>
+    /// Writes enriched channel videos directly into <c>AdminDb.channel_videos</c> so the unified
+    /// portfolio search explorer shows live synced videos with view counts and outlier scores.
+    /// Non-fatal when CentralMongo is disabled or unreachable.
+    /// </summary>
+    public async Task<int> UpsertChannelVideosAsync(IEnumerable<ChannelMetrics> channels, CancellationToken ct = default)
+    {
+        if (_videoCatalogCollection is null) return 0;
+
+        var ops = new List<WriteModel<BsonDocument>>();
+        foreach (var ch in (channels ?? []).Where(c => c is not null && c.IsActive))
+        {
+            var handle = (ch.ChannelHandle ?? string.Empty).Trim();
+            if (!string.IsNullOrEmpty(handle) && !handle.StartsWith('@'))
+                handle = "@" + handle;
+            var channelKey = handle.TrimStart('@').ToLowerInvariant();
+            var subs = Math.Max(0, ch.FollowersOrSubscribers);
+
+            foreach (var v in ch.RecentVideos ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(v.VideoId) || string.IsNullOrWhiteSpace(v.Title))
+                    continue;
+
+                var vid = v.VideoId.Trim();
+                var isShort = v.Url.Contains("/shorts/", StringComparison.OrdinalIgnoreCase) ||
+                              v.Title.Contains("#short", StringComparison.OrdinalIgnoreCase);
+                var safeUrl = !string.IsNullOrWhiteSpace(v.Url)
+                    ? v.Url.Trim()
+                    : (isShort ? $"https://www.youtube.com/shorts/{vid}" : $"https://www.youtube.com/watch?v={vid}");
+                var thumb = !string.IsNullOrWhiteSpace(v.ThumbnailUrl)
+                    ? v.ThumbnailUrl.Trim()
+                    : $"https://i.ytimg.com/vi/{Uri.EscapeDataString(vid)}/hqdefault.jpg";
+                var vps = subs > 0 ? Math.Round(v.Views / (double)subs, 2) : 0.0;
+                var combinedText = $"{v.Title} {v.DescriptionSnippet} {ch.Niche}";
+                var lang = combinedText.Any(c => c is >= '\u0900' and <= '\u097F') ? "hi" : "en";
+
+                var filter = Builders<BsonDocument>.Filter.Eq("VideoId", vid);
+                var update = Builders<BsonDocument>.Update
+                    .SetOnInsert("_id", $"vid:{vid}")
+                    .Set("VideoId", vid)
+                    .Set("Title", v.Title.Length > 200 ? v.Title[..200] : v.Title)
+                    .Set("Description", v.DescriptionSnippet.Length > 1000 ? v.DescriptionSnippet[..1000] : v.DescriptionSnippet)
+                    .Set("Url", safeUrl)
+                    .Set("ThumbnailUrl", thumb)
+                    .Set("ChannelKey", channelKey)
+                    .Set("ChannelName", ch.ChannelName)
+                    .Set("ChannelHandle", handle)
+                    .Set("Platform", ch.Platform.ToString())
+                    .Set("Niche", ch.Niche)
+                    .Set("Language", lang)
+                    .Set("Format", isShort ? "Short" : "Video")
+                    .Set("SourceApp", "SocialAnalytics")
+                    .Set("Views", Math.Max(0, v.Views))
+                    .Set("ViewsPerSubscriber", vps)
+                    .Set("PublishedAtUtc", v.PublishedAt == default ? DateTime.UtcNow : v.PublishedAt.ToUniversalTime())
+                    .Set("UpdatedAtUtc", DateTime.UtcNow)
+                    .Set("IsRemoved", false);
+
+                ops.Add(new UpdateOneModel<BsonDocument>(filter, update) { IsUpsert = true });
+            }
+        }
+
+        if (ops.Count == 0) return 0;
+
+        try
+        {
+            await _videoCatalogCollection.BulkWriteAsync(ops, new BulkWriteOptions { IsOrdered = false }, ct).ConfigureAwait(false);
+            return ops.Count;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Non-fatal: failed syncing {Count} videos to Central AdminDb.channel_videos.", ops.Count);
+            return 0;
+        }
+    }
 
     private CentralAdminIntegrationsSnapshot DecryptDocument(CentralAppSettingsDocument doc)
     {

@@ -104,3 +104,53 @@ public class PlatformSummary
     public decimal EstimatedEarningsMonthly { get; set; }
     public int ChannelCount { get; set; }
 }
+
+public class OutlierVideoBenchmark
+{
+    public string ChannelId { get; set; } = string.Empty;
+    public string ChannelName { get; set; } = string.Empty;
+    public string ChannelHandle { get; set; } = string.Empty;
+    public SocialPlatform Platform { get; set; } = SocialPlatform.YouTube;
+    public long ChannelSubscribers { get; set; }
+    public string VideoId { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Url { get; set; } = string.Empty;
+    public string ThumbnailUrl { get; set; } = string.Empty;
+    public DateTime PublishedAt { get; set; }
+    public long Views { get; set; }
+    public double ViewsPerSubscriber { get; set; }
+    public double ViewsPerDay { get; set; }
+    public double BreakoutMultiplier { get; set; }
+    public bool IsShort { get; set; }
+    public string OutlierTier { get; set; } = "Steady";
+}
+
+public class ChannelGrowthBenchmark
+{
+    public string ChannelId { get; set; } = string.Empty;
+    public string ChannelName { get; set; } = string.Empty;
+    public string ChannelHandle { get; set; } = string.Empty;
+    public SocialPlatform Platform { get; set; } = SocialPlatform.YouTube;
+    public string Niche { get; set; } = "General";
+    public long FollowersOrSubscribers { get; set; }
+    public long TotalViewsLast30Days { get; set; }
+    public double GrowthRateMonthlyPercentage { get; set; }
+    public double ViewsPerSubscriber { get; set; }
+    public double AvgVideoOutlierScore { get; set; }
+    public double AvgViewsPerDay { get; set; }
+    public int OutlierVideoCount { get; set; }
+    public double GrowthVelocityScore { get; set; }
+    public OutlierVideoBenchmark? TopOutlierVideo { get; set; }
+}
+
+public class OutlierBenchmarkReport
+{
+    public DateTime GeneratedAtUtc { get; set; } = DateTime.UtcNow;
+    public int ChannelsEvaluated { get; set; }
+    public int VideosEvaluated { get; set; }
+    public double MedianViewsPerSubscriber { get; set; }
+    public OutlierVideoBenchmark? TopOutlierVideo { get; set; }
+    public ChannelGrowthBenchmark? FastestGrowingChannel { get; set; }
+    public List<ChannelGrowthBenchmark> ChannelLeaderboard { get; set; } = [];
+    public List<OutlierVideoBenchmark> TopOutlierVideos { get; set; } = [];
+}

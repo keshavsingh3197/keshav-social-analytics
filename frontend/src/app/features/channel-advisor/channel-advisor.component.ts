@@ -5,6 +5,7 @@ import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { AuthService } from '../../core/services/auth.service';
 import { EcosystemConfigService } from '../../core/services/ecosystem-config.service';
+import { LocaleService } from '../../core/services/locale.service';
 import { AdSlotComponent } from '../shared/ad-slot/ad-slot.component';
 import { LoadingStateComponent } from '../shared/loading/loading-state.component';
 import {
@@ -25,7 +26,7 @@ import {
       <div class="header-box">
         <div class="header-top">
           <div>
-            <h1>🚀 Growth Advisor & Channel Fix Studio</h1>
+            <h1>{{ locale.t('social.advisor.title') }}</h1>
             <p>
               Deep-audit any YouTube or social channel: spot exact algorithmic & monetization issues,
               optimize video titles & descriptions live, and copy custom AI prompts pre-loaded with your metrics.
@@ -571,6 +572,7 @@ import {
 export class ChannelAdvisorComponent implements OnInit {
   private analytics = inject(AnalyticsService);
   readonly auth = inject(AuthService);
+  readonly locale = inject(LocaleService);
   private ecosystem = inject(EcosystemConfigService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);

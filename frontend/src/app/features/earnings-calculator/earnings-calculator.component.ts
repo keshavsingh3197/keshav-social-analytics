@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { AnalyticsService } from '../../core/services/analytics.service';
+import { LocaleService } from '../../core/services/locale.service';
 import { AdSlotComponent } from '../shared/ad-slot/ad-slot.component';
 import { LoadingStateComponent } from '../shared/loading/loading-state.component';
 import {
@@ -20,7 +21,7 @@ import {
   template: `
     <div class="calculator-page">
       <div class="header-box">
-        <h1>💰 Creator Earnings & RPM Calculator</h1>
+        <h1>{{ locale.t('social.earnings.title') }}</h1>
         <p>
           Simulate revenue potential from real channel view velocity or any &#64;handle. Calculate AdSense RPM,
           brand sponsorships, and website referral affiliate earnings in seconds.
@@ -468,6 +469,7 @@ import {
 })
 export class EarningsCalculatorComponent implements OnInit {
   private analytics = inject(AnalyticsService);
+  readonly locale = inject(LocaleService);
 
   readonly config = signal<EarningsConfig | null>(null);
   readonly loadingConfig = signal(true);
