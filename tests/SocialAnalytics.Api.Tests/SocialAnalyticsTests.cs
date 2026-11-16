@@ -529,6 +529,169 @@ public sealed class SocialAnalyticsTests : IDisposable
         Assert.Contains("https://panchang.keshavsingh.in", audit.RecommendedDescriptionTemplate);
     }
 
+    [Fact]
+    public void BuildOutlierBenchmarks_RanksViralViewsPerSubscriberAndGrowthVelocity()
+    {
+        var now = new DateTime(2026, 11, 15, 12, 0, 0, DateTimeKind.Utc);
+        var breakoutComedy = new ChannelMetrics
+        {
+            Id = "ch-comedy",
+            ChannelName = "Keshav Anim FF",
+            ChannelHandle = "@KESHAV-ANIM-FF",
+            Platform = SocialPlatform.YouTube,
+            Niche = "3D Comedy",
+            FollowersOrSubscribers = 1_000,
+            TotalViewsLast30Days = 85_000,
+            GrowthRateMonthlyPercentage = 42.5,
+            IsActive = true,
+            RecentVideos =
+            [
+                new RecentVideoItem
+                {
+                    VideoId = "short1",
+                    Title = "Chai Stall Confusion #shorts",
+                    Url = "https://www.youtube.com/shorts/short1",
+                    PublishedAt = now.AddDays(-2),
+                    Views = 25_000
+                },
+                new RecentVideoItem
+                {
+                    VideoId = "short2",
+                    Title = "Normal Skit",
+                    Url = "https://www.youtube.com/shorts/short2",
+                    PublishedAt = now.AddDays(-5),
+                    Views = 800
+                }
+            ]
+        };
+
+        var steadyChannel = new ChannelMetrics
+        {
+            Id = "ch-steady",
+            ChannelName = "Steady Channel",
+            ChannelHandle = "@steady",
+            Platform = SocialPlatform.YouTube,
+            Niche = "Dev",
+            FollowersOrSubscribers = 50_000,
+            TotalViewsLast30Days = 30_000,
+            GrowthRateMonthlyPercentage = 4.0,
+            IsActive = true,
+            RecentVideos =
+            [
+                new RecentVideoItem
+                {
+                    VideoId = "long1",
+                    Title = "Deep Dive Tutorial",
+                    Url = "https://www.youtube.com/watch?v=long1",
+                    PublishedAt = now.AddDays(-10),
+                    Views = 5_000
+                }
+            ]
+        };
+
+        var zeroSubChannel = new ChannelMetrics
+        {
+            Id = "ch-zero",
+            ChannelName = "Hidden Subs",
+            ChannelHandle = "@hiddensubs",
+            Platform = SocialPlatform.YouTube,
+            FollowersOrSubscribers = 0,
+            TotalViewsLast30Days = 2_000,
+            GrowthRateMonthlyPercentage = 1.0,
+            IsActive = true,
+            RecentVideos =
+            [
+                new RecentVideoItem
+                {
+                    VideoId = "hid1",
+                    Title = "Clip",
+                    Url = "https://www.youtube.com/shorts/hid1",
+                    PublishedAt = now.AddDays(-1),
+                    Views = 500
+                }
+            ]
+        };
+
+        var report = AnalyticsEngineService.BuildOutlierBenchmarks(
+            [steadyChannel, zeroSubChannel, breakoutComedy],
+            limit: 10,
+            nowUtcOverride: now);
+
+        Assert.Equal(3, report.ChannelsEvaluated);
+        Assert.Equal(4, report.VideosEvaluated);
+        Assert.NotNull(report.TopOutlierVideo);
+        Assert.Equal("short1", report.TopOutlierVideo!.VideoId);
+        Assert.Equal(25.0, report.TopOutlierVideo.ViewsPerSubscriber);
+        Assert.Equal(12500.0, report.TopOutlierVideo.ViewsPerDay);
+        Assert.Equal("Viral Outlier", report.TopOutlierVideo.OutlierTier);
+        Assert.True(report.TopOutlierVideo.IsShort);
+        Assert.Equal("@KESHAV-ANIM-FF", report.FastestGrowingChannel!.ChannelHandle);
+
+        var hiddenVideo = Assert.Single(report.TopOutlierVideos, v => v.VideoId == "hid1");
+        Assert.Equal(0.0, hiddenVideo.ViewsPerSubscriber);
+    }
+
+    [Fact]
+    public async Task AnalyticsController_GetOutliers_BenchmarksPassedPublicHandleWithoutAuth()
+    {
+        var publishedRecent = DateTime.UtcNow.AddDays(-2).ToString("O");
+        var handler = new StubHttpHandler(req =>
+        {
+            var url = req.RequestUri!.ToString();
+            if (url.Contains("youtube.com/@KESHAV-ANIM-FF", StringComparison.OrdinalIgnoreCase))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""
+                        <html>
+                        <meta property="og:title" content="Keshav Anim FF">
+                        <script>{"externalId":"UC9988776655443322110099","subscriberCountText":{"simpleText":"500 subscribers"}}</script>
+                        </html>
+                        """, Encoding.UTF8, "text/html")
+                };
+            }
+            if (url.Contains("feeds/videos.xml?channel_id=UC9988776655443322110099"))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent($"""
+                        <?xml version="1.0" encoding="UTF-8"?>
+                        <feed xmlns:yt="http://www.youtube.com/xml/schemas/2015"
+                              xmlns:media="http://search.yahoo.com/mrss/"
+                              xmlns="http://www.w3.org/2005/Atom">
+                          <title>Keshav Anim FF</title>
+                          <entry>
+                            <yt:videoId>ffVid001</yt:videoId>
+                            <title>Comedy Skit #shorts</title>
+                            <link rel="alternate" href="https://www.youtube.com/shorts/ffVid001"/>
+                            <published>{publishedRecent}</published>
+                            <media:group>
+                              <media:community><media:statistics views="4500"/></media:community>
+                            </media:group>
+                          </entry>
+                        </feed>
+                        """, Encoding.UTF8, "text/xml")
+                };
+            }
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+
+        var store = CreateStore();
+        var cfg = new SocialConfigService(store);
+        var analytics = new AnalyticsEngineService(store, cfg);
+        var yt = new YouTubeLiveFetchService(new StubHttpClientFactory(handler), NullLogger<YouTubeLiveFetchService>.Instance);
+        var lookup = new ChannelLookupService(cfg, yt, new RevenueCalculatorService(cfg), new GrowthAdvisorService(store, analytics));
+
+        var controller = BuildAnalyticsController(analytics, lookup, cfg, yt, new ClaimsPrincipal());
+        var res = await controller.GetOutliers(limit: 10, handles: "@KESHAV-ANIM-FF", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(res.Result);
+        var report = Assert.IsType<OutlierBenchmarkReport>(ok.Value);
+        Assert.Equal(1, report.ChannelsEvaluated);
+        Assert.Equal("ffVid001", report.TopOutlierVideo!.VideoId);
+        Assert.Equal(9.0, report.TopOutlierVideo.ViewsPerSubscriber);
+    }
+
     private static ClaimsPrincipal MakePrincipal(string userId, string role) =>
         new(new ClaimsIdentity(
         [

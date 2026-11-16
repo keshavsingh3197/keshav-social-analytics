@@ -21,6 +21,8 @@ public sealed class CentralEcosystemSyncService
     private readonly FunnelService _funnelService;
     private readonly YouTubeLiveFetchService _youtubeFetch;
     private readonly ILogger<CentralEcosystemSyncService> _logger;
+    private readonly CentralLocalizationService? _centralLocalization;
+    private readonly CentralAdminConfigReader? _centralReader;
 
     public CentralEcosystemSyncService(
         IHttpClientFactory httpFactory,
@@ -29,7 +31,9 @@ public sealed class CentralEcosystemSyncService
         AnalyticsEngineService analyticsService,
         FunnelService funnelService,
         YouTubeLiveFetchService youtubeFetch,
-        ILogger<CentralEcosystemSyncService> logger)
+        ILogger<CentralEcosystemSyncService> logger,
+        CentralLocalizationService? centralLocalization = null,
+        CentralAdminConfigReader? centralReader = null)
     {
         _httpFactory = httpFactory;
         _configuration = configuration;
@@ -38,6 +42,8 @@ public sealed class CentralEcosystemSyncService
         _funnelService = funnelService;
         _youtubeFetch = youtubeFetch;
         _logger = logger;
+        _centralLocalization = centralLocalization;
+        _centralReader = centralReader;
     }
 
     public async Task<EcosystemSyncSummary> SyncAllAsync(bool purgeLegacy = true, CancellationToken ct = default)
@@ -57,25 +63,34 @@ public sealed class CentralEcosystemSyncService
             : (_configuration["Ecosystem:AdminConfigUrl"] ?? "https://id.keshavsingh.in/api/config");
 
         CentralConfigEnvelope? envelope = null;
-        try
+        if (_centralLocalization is not null)
         {
-            var http = _httpFactory.CreateClient("CentralConfig");
-            using var resp = await http.GetAsync(configUrl, ct);
-            if (resp.IsSuccessStatusCode)
-            {
-                var raw = await resp.Content.ReadAsStringAsync(ct);
-                envelope = JsonSerializer.Deserialize<CentralConfigEnvelope>(raw, JsonOpts);
-            }
+            envelope = await _centralLocalization.TryLoadCentralEnvelopeFromMongoAsync(ct);
         }
-        catch (Exception ex)
+
+        if (envelope is null)
         {
-            _logger.LogWarning(ex, "Could not fetch central config from {Url}", configUrl);
+            try
+            {
+                var http = _httpFactory.CreateClient("CentralConfig");
+                using var resp = await http.GetAsync(configUrl, ct);
+                if (resp.IsSuccessStatusCode)
+                {
+                    var raw = await resp.Content.ReadAsStringAsync(ct);
+                    envelope = JsonSerializer.Deserialize<CentralConfigEnvelope>(raw, JsonOpts);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not fetch central config from {Url}", configUrl);
+            }
         }
 
         var existingChannels = await _analyticsService.GetAllChannelsAsync(includeInactive: true);
 
         if (envelope?.Channels is { Count: > 0 } centralChannels)
         {
+            var syncedChannels = new List<ChannelMetrics>();
             foreach (var cc in centralChannels.Where(c => c.IsEnabled && c.ShowInAnalytics))
             {
                 var platform = Enum.TryParse<SocialPlatform>(cc.Platform, true, out var parsedPlat)
@@ -112,9 +127,13 @@ public sealed class CentralEcosystemSyncService
                 }
 
                 await _analyticsService.UpsertChannelAsync(channel);
+                syncedChannels.Add(channel);
                 if (existing is null) summary.ImportedChannels++;
                 else summary.UpdatedChannels++;
             }
+
+            if (_centralReader is not null && syncedChannels.Count > 0)
+                await _centralReader.UpsertChannelVideosAsync(syncedChannels, ct);
         }
 
         // Also create zero-click initial funnels & opportunities from live ecosystem websites if none exist
@@ -175,6 +194,7 @@ public sealed class CentralEcosystemSyncService
         summary.UsedYouTubeApiKey = !string.IsNullOrWhiteSpace(apiKey);
 
         var channels = await _analyticsService.GetAllChannelsAsync(includeInactive: true);
+        var refreshedChannels = new List<ChannelMetrics>();
         foreach (var channel in channels.Where(c =>
             c.Platform == SocialPlatform.YouTube &&
             (c.IsAdminOwned || string.IsNullOrWhiteSpace(c.OwnerUserId))))
@@ -182,10 +202,14 @@ public sealed class CentralEcosystemSyncService
             if (await _youtubeFetch.EnrichChannelAsync(channel, apiKey, ct))
             {
                 await _analyticsService.UpsertChannelAsync(channel);
+                refreshedChannels.Add(channel);
                 summary.UpdatedChannels++;
                 summary.LiveVideosFetched += channel.RecentVideos.Count;
             }
         }
+
+        if (_centralReader is not null && refreshedChannels.Count > 0)
+            await _centralReader.UpsertChannelVideosAsync(refreshedChannels, ct);
 
         summary.Message = $"Refreshed {summary.UpdatedChannels} YouTube channel(s) and loaded {summary.LiveVideosFetched} real recent videos.";
         return summary;

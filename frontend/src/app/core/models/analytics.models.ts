@@ -421,3 +421,50 @@ export interface AppConfigEnvelope {
   websites?: EcosystemWebsite[];
   channels?: CentralChannel[];
 }
+
+export interface OutlierVideoBenchmark {
+  channelId: string;
+  channelName: string;
+  channelHandle: string;
+  platform: SocialPlatform;
+  channelSubscribers: number;
+  videoId: string;
+  title: string;
+  url: string;
+  thumbnailUrl: string;
+  publishedAt: string;
+  views: number;
+  viewsPerSubscriber: number;
+  viewsPerDay: number;
+  breakoutMultiplier: number;
+  isShort: boolean;
+  outlierTier: 'Viral Outlier' | 'Strong Breakout' | 'Steady' | string;
+}
+
+export interface ChannelGrowthBenchmark {
+  channelId: string;
+  channelName: string;
+  channelHandle: string;
+  platform: SocialPlatform;
+  niche: string;
+  followersOrSubscribers: number;
+  totalViewsLast30Days: number;
+  growthRateMonthlyPercentage: number;
+  viewsPerSubscriber: number;
+  avgVideoOutlierScore: number;
+  avgViewsPerDay: number;
+  outlierVideoCount: number;
+  growthVelocityScore: number;
+  topOutlierVideo?: OutlierVideoBenchmark | null;
+}
+
+export interface OutlierBenchmarkReport {
+  generatedAtUtc: string;
+  channelsEvaluated: number;
+  videosEvaluated: number;
+  medianViewsPerSubscriber: number;
+  topOutlierVideo?: OutlierVideoBenchmark | null;
+  fastestGrowingChannel?: ChannelGrowthBenchmark | null;
+  channelLeaderboard: ChannelGrowthBenchmark[];
+  topOutlierVideos: OutlierVideoBenchmark[];
+}

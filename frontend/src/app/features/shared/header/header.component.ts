@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { EcosystemConfigService } from '../../../core/services/ecosystem-config.service';
+import { LocaleService } from '../../../core/services/locale.service';
 
 @Component({
   selector: 'app-header',
@@ -17,16 +18,31 @@ import { EcosystemConfigService } from '../../../core/services/ecosystem-config.
         </a>
 
         <nav class="nav-links">
-          <a routerLink="/dashboard" routerLinkActive="active-nav">📊 Dashboard</a>
-          <a routerLink="/earnings" routerLinkActive="active-nav">💰 Earnings & RPM</a>
-          <a routerLink="/advisor" routerLinkActive="active-nav">🚀 Growth Advisor</a>
-          <a routerLink="/funnel" routerLinkActive="active-nav">🎯 Traffic Funnel</a>
+          <a routerLink="/dashboard" routerLinkActive="active-nav">📊 {{ locale.t('social.nav.dashboard') }}</a>
+          <a routerLink="/earnings" routerLinkActive="active-nav">💰 {{ locale.t('social.nav.earnings') }}</a>
+          <a routerLink="/advisor" routerLinkActive="active-nav">🚀 {{ locale.t('social.nav.advisor') }}</a>
+          <a routerLink="/funnel" routerLinkActive="active-nav">🎯 {{ locale.t('social.nav.funnel') }}</a>
           @if (auth.isAdmin()) {
-            <a routerLink="/admin" routerLinkActive="active-nav" class="admin-nav">🛡️ Admin</a>
+            <a routerLink="/admin" routerLinkActive="active-nav" class="admin-nav">🛡️ {{ locale.t('social.nav.admin') }}</a>
           }
         </nav>
 
         <div class="header-actions">
+          @if (locale.showPicker()) {
+            <div class="lang-toggle" role="group" [attr.aria-label]="locale.t('ecosystem.language.label')">
+              @for (lang of locale.availableLanguages(); track lang.code) {
+                <button
+                  type="button"
+                  class="lang-btn"
+                  [class.active]="locale.language() === lang.code"
+                  [disabled]="!locale.canSwitch()"
+                  (click)="locale.set(lang.code)"
+                  [title]="lang.label">
+                  {{ lang.shortLabel }}
+                </button>
+              }
+            </div>
+          }
           @if (auth.isAuthenticated()) {
             <div class="user-chip">
               <span class="user-avatar">{{ auth.user()?.displayName?.charAt(0) || 'U' }}</span>
@@ -77,6 +93,28 @@ import { EcosystemConfigService } from '../../../core/services/ecosystem-config.
       font-size: 0.75rem;
       color: #64748b;
       font-weight: 500;
+    }
+    .lang-toggle {
+      display: inline-flex;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 999px;
+      padding: 2px;
+      gap: 2px;
+    }
+    .lang-btn {
+      border: none;
+      background: transparent;
+      color: #334155;
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 0.25rem 0.55rem;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    .lang-btn.active {
+      background: #2563eb;
+      color: #ffffff;
     }
     .nav-links {
       display: flex;
@@ -185,10 +223,11 @@ import { EcosystemConfigService } from '../../../core/services/ecosystem-config.
 export class HeaderComponent {
   readonly auth = inject(AuthService);
   private ecosystem = inject(EcosystemConfigService);
+  readonly locale = inject(LocaleService);
 
   readonly brandSubtitle = computed(() => {
     const creator = this.ecosystem.creatorName();
-    return creator ? `${creator} Analytics` : 'Creator & Social Intelligence';
+    return creator ? `${creator} Analytics` : this.locale.t('social.brand.sub');
   });
 
   login(): void {

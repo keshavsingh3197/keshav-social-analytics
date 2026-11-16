@@ -26,6 +26,7 @@ builder.Services.AddHttpClient("CentralConfig", client =>
 builder.Services.AddDataProtection();
 builder.Services.AddSingleton<HybridDataStore>();
 builder.Services.AddSingleton<CentralAdminConfigReader>();
+builder.Services.AddSingleton<CentralLocalizationService>();
 builder.Services.AddSingleton<SocialConfigService>();
 builder.Services.AddSingleton<FunnelService>();
 builder.Services.AddSingleton<AnalyticsEngineService>();

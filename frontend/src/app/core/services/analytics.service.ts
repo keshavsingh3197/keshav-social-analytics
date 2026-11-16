@@ -15,6 +15,7 @@ import {
   GrowthConfig,
   GrowthSuggestion,
   IntegrationSettingsView,
+  OutlierBenchmarkReport,
   PlatformSummary,
   PublicChannelAnalysisResult,
   PublicChannelLookupRequest,
@@ -59,6 +60,27 @@ export class AnalyticsService {
   getRecentVideos(limit = 16): Observable<RecentFeedVideo[]> {
     return this.http.get<RecentFeedVideo[]>(`${this.api}/analytics/videos?limit=${limit}`).pipe(
       catchError(() => of([]))
+    );
+  }
+
+  getOutliers(limit = 15, handles = ''): Observable<OutlierBenchmarkReport> {
+    const trimmed = handles.trim();
+    const qs = trimmed
+      ? `limit=${limit}&handles=${encodeURIComponent(trimmed)}`
+      : `limit=${limit}`;
+    return this.http.get<OutlierBenchmarkReport>(`${this.api}/analytics/outliers?${qs}`).pipe(
+      catchError(() =>
+        of({
+          generatedAtUtc: new Date().toISOString(),
+          channelsEvaluated: 0,
+          videosEvaluated: 0,
+          medianViewsPerSubscriber: 0,
+          topOutlierVideo: null,
+          fastestGrowingChannel: null,
+          channelLeaderboard: [],
+          topOutlierVideos: []
+        })
+      )
     );
   }
 

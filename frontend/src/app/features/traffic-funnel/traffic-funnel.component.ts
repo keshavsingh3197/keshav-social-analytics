@@ -6,6 +6,7 @@ import { finalize } from 'rxjs';
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { EcosystemConfigService } from '../../core/services/ecosystem-config.service';
 import { AuthService } from '../../core/services/auth.service';
+import { LocaleService } from '../../core/services/locale.service';
 import { AdSlotComponent } from '../shared/ad-slot/ad-slot.component';
 import { LoadingStateComponent } from '../shared/loading/loading-state.component';
 import { FunnelCampaign, SiteConfig } from '../../core/models/analytics.models';
@@ -19,7 +20,7 @@ import { FunnelCampaign, SiteConfig } from '../../core/models/analytics.models';
       <div class="header-box">
         <div class="header-box-row">
           <div>
-            <h1>🎯 Traffic Funnel & Link Conversion Engine</h1>
+            <h1>{{ locale.t('social.funnel.title') }}</h1>
             <p>
               Convert video viewers and social visitors into tracked website sessions and conversions.
               Each signed-in creator manages their own private campaigns and short tracking URLs (<code>/t/...</code>).
@@ -415,6 +416,7 @@ export class TrafficFunnelComponent implements OnInit {
   private analytics = inject(AnalyticsService);
   private ecosystem = inject(EcosystemConfigService);
   readonly auth = inject(AuthService);
+  readonly locale = inject(LocaleService);
 
   readonly campaigns = signal<FunnelCampaign[]>([]);
   readonly siteConfig = signal<SiteConfig | null>(null);

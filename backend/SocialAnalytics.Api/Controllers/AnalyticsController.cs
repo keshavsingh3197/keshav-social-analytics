@@ -62,6 +62,52 @@ public class AnalyticsController : ControllerBase
     }
 
     /// <summary>
+    /// Computes Views / Subscriber, Views / Day, Breakout Multiplier, and Growth Velocity leaderboard
+    /// across the caller's channels plus up to 5 optional public @handles passed via ?handles=@a,@b.
+    /// </summary>
+    [HttpGet("outliers")]
+    [AllowAnonymous]
+    public async Task<ActionResult<OutlierBenchmarkReport>> GetOutliers(
+        [FromQuery] int limit = 20,
+        [FromQuery] string? handles = null,
+        CancellationToken ct = default)
+    {
+        var extraChannels = new List<ChannelMetrics>();
+        if (!string.IsNullOrWhiteSpace(handles))
+        {
+            var queries = handles
+                .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(5);
+
+            foreach (var query in queries)
+            {
+                try
+                {
+                    var analysis = await _lookupService.AnalyzeAsync(
+                        new PublicChannelLookupRequest { Query = query, Platform = SocialPlatform.YouTube },
+                        ct);
+                    if (analysis.Channel is not null)
+                    {
+                        extraChannels.Add(analysis.Channel);
+                    }
+                }
+                catch
+                {
+                    // Skip invalid or temporarily unreachable handle without failing the benchmark report.
+                }
+            }
+        }
+
+        var report = await _analyticsService.GetOutliersForUserAsync(
+            User.GetCallerUserId(),
+            User.IsCallerAdmin(),
+            extraChannels,
+            limit);
+        return Ok(report);
+    }
+
+    /// <summary>
     /// Public auto-search on YouTube / social handles so visitors and signed-in creators
     /// can find any channel by @handle, URL, or name with minimal manual input.
     /// </summary>

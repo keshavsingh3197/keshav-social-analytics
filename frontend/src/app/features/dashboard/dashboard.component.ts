@@ -1,15 +1,18 @@
 import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { EcosystemConfigService } from '../../core/services/ecosystem-config.service';
 import { AuthService } from '../../core/services/auth.service';
+import { LocaleService } from '../../core/services/locale.service';
 import { AdSlotComponent } from '../shared/ad-slot/ad-slot.component';
 import { ChannelAnalyzerComponent } from '../shared/channel-analyzer/channel-analyzer.component';
 import { LoadingStateComponent } from '../shared/loading/loading-state.component';
 import {
   ChannelMetrics,
+  OutlierBenchmarkReport,
   PlatformSummary,
   RecentFeedVideo,
   SiteConfig,
@@ -19,7 +22,7 @@ import {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, AdSlotComponent, ChannelAnalyzerComponent, LoadingStateComponent],
+  imports: [CommonModule, FormsModule, RouterLink, AdSlotComponent, ChannelAnalyzerComponent, LoadingStateComponent],
   template: `
     <div class="dashboard-page">
       @if (adminDenied()) {
@@ -53,9 +56,9 @@ import {
               <span>Instant Live Channel Analyzer • Public Creator Intelligence</span>
             }
           </div>
-          <h1>{{ siteConfig()?.heroTitle || 'Social Channel Performance & Growth Hub' }}</h1>
+          <h1>{{ locale.language() === 'hi' ? locale.t('social.hero.title') : (siteConfig()?.heroTitle || locale.t('social.hero.title')) }}</h1>
           <p>
-            {{ siteConfig()?.heroSubtitle || 'Search any YouTube or social handle for instant analytics, RPM forecasts, and growth insights — or sign in to connect your own private channels.' }}
+            {{ locale.language() === 'hi' ? locale.t('social.hero.subtitle') : (siteConfig()?.heroSubtitle || locale.t('social.hero.subtitle')) }}
           </p>
           <div class="hero-cta-group">
             <a routerLink="/earnings" class="btn btn-primary">💰 Calculate Earnings</a>
@@ -362,6 +365,125 @@ import {
           </div>
         </section>
       }
+
+      <!-- Outlier & Growth Benchmarking Engine -->
+      <section id="outliers" class="outlier-section">
+        <div class="outlier-header">
+          <div>
+            <h2>🚀 {{ locale.t('social.nav.outliers') }}</h2>
+            <p>
+              {{ locale.language() === 'hi'
+                ? 'सब्सक्राइबर की तुलना में सबसे तेज़ वायरल होने वाले वीडियो और ग्रोथ वेलोसिटी वाले चैनलों का लाइव बेंचमार्क'
+                : 'Spot viral outliers by Views / Subscriber, daily velocity, breakout vs. channel median, and subscriber growth rate.' }}
+            </p>
+          </div>
+          <form class="outlier-controls" (ngSubmit)="benchmarkOutliers()">
+            <input
+              type="text"
+              [(ngModel)]="outlierHandlesInput"
+              name="outlierHandlesInput"
+              [placeholder]="locale.language() === 'hi' ? '@KESHAV-ANIM-FF, @handle2 (कंपेयर करें)' : 'Benchmark @handles (e.g. @KESHAV-ANIM-FF, @handle2)'"
+            />
+            <button type="button" class="btn btn-chip" (click)="presetComedyOutliers()">@KESHAV-ANIM-FF</button>
+            <button type="submit" class="btn btn-primary" [disabled]="outlierLoading()">
+              {{ outlierLoading()
+                ? (locale.language() === 'hi' ? 'विश्लेषण जारी...' : 'Analyzing...')
+                : (locale.language() === 'hi' ? 'आउटलायर जांचें' : 'Benchmark Outliers') }}
+            </button>
+          </form>
+        </div>
+
+        @if (outlierReport(); as report) {
+          <div class="outlier-kpis">
+            <div class="outlier-kpi">
+              <span class="kpi-label">{{ locale.t('social.kpi.viewsPerSub') }}</span>
+              <strong class="kpi-val">{{ report.topOutlierVideo ? (report.topOutlierVideo.viewsPerSubscriber + 'x') : (report.medianViewsPerSubscriber + 'x') }}</strong>
+              <span class="kpi-sub">{{ report.topOutlierVideo?.title || (locale.language() === 'hi' ? 'टॉप वीडियो स्कोर' : 'Median across evaluated videos: ' + report.medianViewsPerSubscriber + 'x') }}</span>
+            </div>
+            <div class="outlier-kpi">
+              <span class="kpi-label">{{ locale.language() === 'hi' ? 'सबसे तेज़ बढ़ता चैनल' : 'Fastest Growth Channel' }}</span>
+              <strong class="kpi-val">{{ report.fastestGrowingChannel?.channelHandle || report.fastestGrowingChannel?.channelName || '—' }}</strong>
+              <span class="kpi-sub">
+                {{ report.fastestGrowingChannel
+                  ? ('+' + report.fastestGrowingChannel.growthRateMonthlyPercentage + '% / mo • Velocity ' + report.fastestGrowingChannel.growthVelocityScore)
+                  : (locale.language() === 'hi' ? 'चैनल जोड़ें या हैंडल सर्च करें' : 'Compare handles or sign in to benchmark') }}
+              </span>
+            </div>
+            <div class="outlier-kpi">
+              <span class="kpi-label">{{ locale.language() === 'hi' ? 'मूल्यांकित चैनल / वीडियो' : 'Evaluated Channels / Videos' }}</span>
+              <strong class="kpi-val">{{ report.channelsEvaluated }} / {{ report.videosEvaluated }}</strong>
+              <span class="kpi-sub">{{ locale.language() === 'hi' ? 'मीडियन व्यू/सब: ' + report.medianViewsPerSubscriber + 'x' : 'Median Views/Sub: ' + report.medianViewsPerSubscriber + 'x' }}</span>
+            </div>
+          </div>
+
+          @if (report.channelLeaderboard.length > 0) {
+            <div class="outlier-table-wrap">
+              <h3>{{ locale.language() === 'hi' ? '📈 चैनल ग्रोथ वेलोसिटी लीडरबोर्ड' : '📈 Channel Growth Velocity Leaderboard' }}</h3>
+              <table class="outlier-table">
+                <thead>
+                  <tr>
+                    <th>{{ locale.language() === 'hi' ? 'चैनल' : 'Channel' }}</th>
+                    <th>{{ locale.language() === 'hi' ? 'सब्सक्राइबर' : 'Subscribers' }}</th>
+                    <th>{{ locale.language() === 'hi' ? 'मासिक ग्रोथ %' : 'Monthly Growth' }}</th>
+                    <th>{{ locale.t('social.kpi.viewsPerSub') }}</th>
+                    <th>{{ locale.language() === 'hi' ? 'औसत व्यू/दिन' : 'Avg Views / Day' }}</th>
+                    <th>{{ locale.language() === 'hi' ? 'आउटलायर वीडियो' : 'Outliers' }}</th>
+                    <th>{{ locale.language() === 'hi' ? 'वेलोसिटी स्कोर' : 'Velocity Score' }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (ch of report.channelLeaderboard; track ch.channelHandle + ch.channelId) {
+                    <tr>
+                      <td>
+                        <strong>{{ ch.channelName }}</strong>
+                        <span class="sub-handle">{{ ch.channelHandle }}</span>
+                      </td>
+                      <td>{{ ch.followersOrSubscribers | number }}</td>
+                      <td><span class="growth-pill">+{{ ch.growthRateMonthlyPercentage }}%</span></td>
+                      <td><strong>{{ ch.avgVideoOutlierScore }}x</strong></td>
+                      <td>{{ ch.avgViewsPerDay | number:'1.0-1' }}</td>
+                      <td>{{ ch.outlierVideoCount }}</td>
+                      <td><span class="vel-badge">{{ ch.growthVelocityScore }}</span></td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+
+          @if (report.topOutlierVideos.length > 0) {
+            <div class="outlier-videos-wrap">
+              <h3>{{ locale.language() === 'hi' ? '🔥 टॉप आउटलायर वीडियो (व्यूज़ / सब्सक्राइबर अनुसार)' : '🔥 Top Breakout Outlier Videos' }}</h3>
+              <div class="outlier-grid">
+                @for (ov of report.topOutlierVideos.slice(0, 8); track ov.videoId + ov.title) {
+                  <a class="outlier-card" [href]="ov.url || '#outliers'" [target]="ov.url ? '_blank' : '_self'" rel="noopener">
+                    <div class="outlier-card-top">
+                      <span class="tier-pill" [class.viral]="ov.outlierTier === 'Viral Outlier'" [class.strong]="ov.outlierTier === 'Strong Breakout'">
+                        {{ ov.outlierTier }}
+                      </span>
+                      <span class="format-tag">{{ ov.isShort ? 'Short' : 'Video' }}</span>
+                    </div>
+                    <h4>{{ ov.title }}</h4>
+                    <div class="outlier-ch">{{ ov.channelHandle || ov.channelName }}</div>
+                    <div class="outlier-metrics">
+                      <span><strong>{{ ov.viewsPerSubscriber }}x</strong> {{ locale.language() === 'hi' ? 'व्यू/सब' : 'Views/Sub' }}</span>
+                      <span><strong>{{ ov.breakoutMultiplier }}x</strong> {{ locale.language() === 'hi' ? 'ब्रेकआउट' : 'Breakout' }}</span>
+                      <span><strong>{{ ov.viewsPerDay | number:'1.0-0' }}</strong>/day</span>
+                      <span>{{ ov.views | number }} {{ locale.language() === 'hi' ? 'व्यूज़' : 'views' }}</span>
+                    </div>
+                  </a>
+                }
+              </div>
+            </div>
+          } @else {
+            <p class="outlier-empty">
+              {{ locale.language() === 'hi'
+                ? 'किसी भी @handle का आउटलायर स्कोर देखने के लिए ऊपर हैंडल दर्ज करें या लॉग इन करें।'
+                : 'Enter one or more @handles above (or analyze a channel) to benchmark live Views / Subscriber outliers.' }}
+            </p>
+          }
+        }
+      </section>
     </div>
   `,
   styles: [`
@@ -762,6 +884,36 @@ import {
       background: #f8fafc; color: #0f172a; font-size: 0.74rem; font-weight: 600; cursor: pointer;
     }
     .btn-chip.danger { color: #b91c1c; border-color: #fecaca; background: #fef2f2; }
+
+    .outlier-section{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:1.25rem;display:flex;flex-direction:column;gap:1rem}
+    .outlier-header{display:flex;justify-content:space-between;align-items:flex-end;gap:.7rem;flex-wrap:wrap}
+    .outlier-header h2{margin:0 0 .2rem;font-size:1.25rem;color:#0f172a}
+    .outlier-header p{margin:0;font-size:.86rem;color:#64748b;max-width:580px}
+    .outlier-controls{display:flex;gap:.45rem;flex-wrap:wrap;align-items:center}
+    .outlier-controls input{min-width:220px;padding:.48rem .75rem;border:1px solid #cbd5e1;border-radius:8px;font-size:.85rem}
+    .outlier-kpis,.outlier-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.8rem}
+    .outlier-kpi,.outlier-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:.85rem;display:flex;flex-direction:column;gap:.3rem}
+    .kpi-label,.tier-pill,.format-tag{font-size:.71rem;font-weight:700}
+    .kpi-label{text-transform:uppercase;color:#64748b}
+    .kpi-val{font-size:1.25rem;font-weight:800;color:#0f172a}
+    .kpi-sub,.sub-handle{font-size:.75rem;color:#475569;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .outlier-table-wrap{overflow-x:auto}
+    .outlier-table-wrap h3,.outlier-videos-wrap h3{margin:0 0 .55rem;font-size:.98rem;color:#0f172a}
+    .outlier-table{width:100%;border-collapse:collapse;font-size:.84rem}
+    .outlier-table th,.outlier-table td{padding:.5rem .65rem;border-bottom:1px solid #e2e8f0;text-align:left}
+    .outlier-table th{background:#f8fafc;color:#475569;font-size:.73rem;text-transform:uppercase}
+    .growth-pill{background:#dcfce7;color:#166534;padding:.1rem .4rem;border-radius:6px;font-weight:700}
+    .vel-badge{background:#dbeafe;color:#1e40af;padding:.15rem .5rem;border-radius:999px;font-weight:800}
+    .outlier-card{text-decoration:none;color:inherit}
+    .outlier-card:hover{border-color:#2563eb}
+    .outlier-card-top{display:flex;justify-content:space-between;align-items:center}
+    .tier-pill{padding:.14rem .45rem;border-radius:999px;background:#e2e8f0;color:#334155}
+    .tier-pill.strong{background:#fef3c7;color:#92400e}
+    .tier-pill.viral{background:#fee2e2;color:#b91c1c}
+    .outlier-card h4{margin:0;font-size:.88rem;line-height:1.3;color:#0f172a}
+    .outlier-ch{font-size:.76rem;color:#2563eb;font-weight:600}
+    .outlier-metrics{display:flex;gap:.55rem;flex-wrap:wrap;font-size:.75rem;color:#334155;margin-top:auto}
+    .outlier-empty{margin:0;font-size:.85rem;color:#64748b}
   `]
 })
 export class DashboardComponent implements OnInit {
@@ -769,6 +921,7 @@ export class DashboardComponent implements OnInit {
   private ecosystem = inject(EcosystemConfigService);
   private route = inject(ActivatedRoute);
   readonly auth = inject(AuthService);
+  readonly locale = inject(LocaleService);
 
   readonly channels = signal<ChannelMetrics[]>([]);
   readonly platformSummaries = signal<PlatformSummary[]>([]);
@@ -785,6 +938,9 @@ export class DashboardComponent implements OnInit {
   readonly oauthConfigured = signal(false);
   readonly oauthConnecting = signal(false);
   readonly youtubeConnections = signal<YouTubeConnectionView[]>([]);
+  readonly outlierReport = signal<OutlierBenchmarkReport | null>(null);
+  readonly outlierLoading = signal(false);
+  outlierHandlesInput = '';
 
   readonly verifiedCount = computed(() => this.channels().filter(c => c.isVerifiedLive).length);
 
@@ -840,6 +996,12 @@ export class DashboardComponent implements OnInit {
         this.youtubeConnections.set([]);
       }
     });
+    effect(() => {
+      const searchedHandle = this.lookupResult()?.channel?.channelHandle;
+      if (searchedHandle) {
+        this.loadOutliers(searchedHandle);
+      }
+    });
   }
 
   ngOnInit(): void {
@@ -860,6 +1022,23 @@ export class DashboardComponent implements OnInit {
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe(ov => this.platformSummaries.set(ov));
     this.analytics.getRecentVideos(12).subscribe(v => this.recentVideos.set(v));
+    this.loadOutliers(this.outlierHandlesInput);
+  }
+
+  presetComedyOutliers(): void {
+    this.outlierHandlesInput = '@KESHAV-ANIM-FF';
+    this.benchmarkOutliers();
+  }
+
+  benchmarkOutliers(): void {
+    this.loadOutliers(this.outlierHandlesInput);
+  }
+
+  private loadOutliers(handles = ''): void {
+    this.outlierLoading.set(true);
+    this.analytics.getOutliers(15, handles)
+      .pipe(finalize(() => this.outlierLoading.set(false)))
+      .subscribe(report => this.outlierReport.set(report));
   }
 
   private loadYouTubeStatus(): void {
