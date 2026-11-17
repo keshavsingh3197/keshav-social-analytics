@@ -165,6 +165,24 @@ export interface ChannelAuditSnapshot {
   estimatedMonthlyRevenue: number;
 }
 
+export interface PolicyChecklistItem {
+  id: string;
+  verdict: 'good' | 'wrong' | 'verify';
+  category: string;
+  title: string;
+  detail: string;
+  steps: string[];
+}
+
+export interface MonetizationComplianceAudit {
+  policyUrl: string;
+  overallStatus: 'Strong' | 'NeedsAttention' | 'AtRisk' | string;
+  scoreOutOf100: number;
+  videosEvaluated: number;
+  summaryNote: string;
+  items: PolicyChecklistItem[];
+}
+
 export interface ChannelAuditResult {
   channelHandle: string;
   healthScoreOutOf100: number;
@@ -177,6 +195,7 @@ export interface ChannelAuditResult {
   promptTemplates?: AiPromptTemplate[];
   recommendedDescriptionTemplate?: string;
   recommendedPinnedComment?: string;
+  complianceAudit?: MonetizationComplianceAudit | null;
   prioritySuggestions: GrowthSuggestion[];
   bestUploadTimes: string[];
   highDemandKeywords: string[];

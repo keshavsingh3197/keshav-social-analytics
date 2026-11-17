@@ -124,7 +124,8 @@ public class GrowthAdvisorService
 
         var (stats, videoAudits) = AnalyzeRecentVideos(matchedChannel, effectiveChannelName, effectiveNiche);
         var scorePillars = BuildScorePillars(matchedChannel, config, stats);
-        var detectedIssues = BuildDetectedIssues(matchedChannel, effectiveHandle, platform, config, siteConfig, stats, videoAudits);
+        var complianceAudit = BuildComplianceAudit(matchedChannel, platform, stats, videoAudits);
+        var detectedIssues = BuildDetectedIssues(matchedChannel, effectiveHandle, platform, config, siteConfig, stats, videoAudits, complianceAudit);
         var promptTemplates = BuildPromptTemplates(matchedChannel, effectiveChannelName, effectiveHandle, effectiveNiche, platform, config, siteConfig, stats, videoAudits);
         var recommendedDescription = BuildRecommendedDescriptionTemplate(effectiveChannelName, effectiveHandle, effectiveNiche, config, siteConfig);
         var recommendedPinnedComment = BuildRecommendedPinnedComment(effectiveChannelName, effectiveNiche, siteConfig);
@@ -169,6 +170,7 @@ public class GrowthAdvisorService
             PromptTemplates = promptTemplates,
             RecommendedDescriptionTemplate = recommendedDescription,
             RecommendedPinnedComment = recommendedPinnedComment,
+            ComplianceAudit = complianceAudit,
             PrioritySuggestions = prioritySuggestions,
             BestUploadTimes = uploadTimes,
             HighDemandKeywords = config.HighDemandKeywords
@@ -349,7 +351,8 @@ public class GrowthAdvisorService
         GrowthConfig config,
         SiteConfig? siteConfig,
         VideoSummaryStats stats,
-        List<VideoAuditItem> videoAudits)
+        List<VideoAuditItem> videoAudits,
+        MonetizationComplianceAudit complianceAudit)
     {
         var issues = new List<ChannelIssueItem>();
 
@@ -510,7 +513,255 @@ public class GrowthAdvisorService
             });
         }
 
+        foreach (var policyRisk in complianceAudit.Items.Where(i => i.Verdict == "wrong").Take(2))
+        {
+            issues.Add(new ChannelIssueItem
+            {
+                Id = $"issue-{policyRisk.Id}",
+                Severity = policyRisk.Category.Contains("Inauthentic", StringComparison.OrdinalIgnoreCase)
+                    || policyRisk.Category.Contains("Reused", StringComparison.OrdinalIgnoreCase)
+                    ? "Critical"
+                    : "Warning",
+                Category = $"YPP Policy: {policyRisk.Category}",
+                Title = policyRisk.Title,
+                Evidence = $"{policyRisk.Detail} Steps: {string.Join(" ", policyRisk.Steps)}",
+                ImpactEstimate = "Protects YPP monetization eligibility & Browse recommendations",
+                FixActionType = "metadata-studio",
+                FixActionLabel = "Open Fix Studio",
+                FixRoute = "",
+                FixPrompt = $"Fix this YouTube monetization policy risk (per https://support.google.com/youtube/answer/1311392?hl=en) on channel \"{ch.ChannelName}\" ({ch.Niche}):\nIssue: {policyRisk.Title}\nWhy it matters: {policyRisk.Detail}\nGive me 5 original non-repetitive episode angles, mobile-safe titles (<=52 chars), and unique 2-line opening descriptions."
+            });
+        }
+
         return issues;
+    }
+
+    private const string YouTubeMonetizationPolicyUrl = "https://support.google.com/youtube/answer/1311392?hl=en";
+
+    private static MonetizationComplianceAudit BuildComplianceAudit(
+        ChannelMetrics? ch,
+        SocialPlatform platform,
+        VideoSummaryStats stats,
+        List<VideoAuditItem> videoAudits)
+    {
+        var items = new List<PolicyChecklistItem>();
+        var recent = ch?.RecentVideos
+            .OrderByDescending(v => v.PublishedAt)
+            .Take(12)
+            .ToList() ?? [];
+
+        if (recent.Count == 0)
+        {
+            items.Add(new PolicyChecklistItem
+            {
+                Id = "ypp-no-uploads",
+                Verdict = "verify",
+                Category = "Channel Baseline",
+                Title = "Analyze a live YouTube @handle to inspect recent uploads",
+                Detail = "Public metadata checks need at least a few recent uploads so we can verify title variety, descriptions, and packaging.",
+                Steps =
+                [
+                    "Search your @handle or connect your YouTube channel on the Dashboard.",
+                    $"Review YouTube's official monetization standards at {YouTubeMonetizationPolicyUrl}."
+                ]
+            });
+            return new MonetizationComplianceAudit
+            {
+                PolicyUrl = YouTubeMonetizationPolicyUrl,
+                OverallStatus = "NeedsAttention",
+                ScoreOutOf100 = 60,
+                VideosEvaluated = 0,
+                SummaryNote = "Public channel feed not loaded yet; use YouTube Studio to verify originality & YPP eligibility manually.",
+                Items = items
+            };
+        }
+
+        var score = 100;
+
+        // 1. Inauthentic Content — repetitive/template or default filename titles
+        var fileNameTitles = recent.Where(v => Regex.IsMatch((v.Title ?? string.Empty).Trim(), @"^((VID|IMG|PXL|MOV)[\s_-]?\d[\d_\s-]*|(short|video|clip|untitled)\s*[#(]?\d*\)?)$|\.(mp4|mov|m4v|webm)$", RegexOptions.IgnoreCase) || string.IsNullOrWhiteSpace(v.Title)).ToList();
+        var duplicateTitles = recent
+            .Select(v => new { v, Stem = NormalizeTitleTemplate(v.Title) })
+            .Where(x => !string.IsNullOrWhiteSpace(x.Stem))
+            .GroupBy(x => x.Stem, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() >= 2)
+            .SelectMany(g => g.Select(x => x.v))
+            .ToList();
+
+        if (fileNameTitles.Count > 0 || (recent.Count >= 3 && duplicateTitles.Count * 4 >= recent.Count))
+        {
+            var badCount = fileNameTitles.Concat(duplicateTitles).Select(v => v.VideoId).Distinct().Count();
+            score -= Math.Min(24, badCount * 4 + 6);
+            items.Add(new PolicyChecklistItem
+            {
+                Id = "ypp-inauthentic-titles",
+                Verdict = "wrong",
+                Category = "Inauthentic Content",
+                Title = $"{badCount} of {recent.Count} recent titles look repetitive or file-named",
+                Detail = "Under YouTube's Inauthentic Content policy, near-identical template titles or raw file names make uploads look mass-produced without unique viewer value.",
+                Steps =
+                [
+                    "Give each upload a clear unique story angle, question, or episode twist in the first 52 characters.",
+                    "Rename raw camera/file-name titles (VID_..., Short 1, .mp4) in YouTube Studio → Video Details.",
+                    "Use the Quick-Fix Packaging Studio below to draft distinct titles before saving."
+                ]
+            });
+        }
+        else
+        {
+            items.Add(new PolicyChecklistItem
+            {
+                Id = "ypp-titles-original",
+                Verdict = "good",
+                Category = "Inauthentic Content",
+                Title = "Recent titles are unique and varied",
+                Detail = $"Across {recent.Count} recent uploads, titles show distinct episode topics with zero default filename placeholders.",
+                Steps = ["Keep varying the hook structure and focal topic across every new upload."]
+            });
+        }
+
+        // 2. Reused Content clues & Description / Spam quality
+        var reusedTitleVideos = recent.Where(v =>
+            Regex.IsMatch(v.Title ?? string.Empty, @"\b(?:whatsapp\s*status|status\s*video|re-?upload|full\s*episode|movie\s*clip|movie\s*scene|tiktok\s*compilation|reels\s*compilation)\b", RegexOptions.IgnoreCase)
+            && (v.DescriptionSnippet ?? string.Empty).Trim().Length < 140).ToList();
+        if (reusedTitleVideos.Count > 0)
+        {
+            score -= 18;
+            items.Add(new PolicyChecklistItem
+            {
+                Id = "ypp-reused-clues",
+                Verdict = "wrong",
+                Category = "Reused Content",
+                Title = $"{reusedTitleVideos.Count} upload(s) read like unedited reuploads/status clips",
+                Detail = "Repurposing TV/movie clips, songs, or Reels/TikToks without original commentary or transformative narrative fails YPP Reused Content review even with zero copyright strikes.",
+                Steps =
+                [
+                    "Rewrite titles and descriptions to highlight your original narration, commentary, or creative breakdown.",
+                    "Remove plain unedited clip compilations before applying for monetization."
+                ]
+            });
+        }
+
+        var missingOrShortDesc = recent.Where(v => string.IsNullOrWhiteSpace(v.DescriptionSnippet) || v.DescriptionSnippet.Trim().Length < 50).ToList();
+        var duplicateDescs = recent
+            .Select(v => new { v, Sig = Regex.Replace((v.DescriptionSnippet ?? string.Empty).ToLowerInvariant(), @"[\d\s]+", " ").Trim() })
+            .Where(x => x.Sig.Length >= 35)
+            .GroupBy(x => x.Sig, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() >= 3)
+            .SelectMany(g => g.Select(x => x.v))
+            .ToList();
+        var hashtagSpam = recent.Where(v => Regex.Matches((v.Title ?? "") + " " + (v.DescriptionSnippet ?? ""), @"(^|\s)#\S+").Count > 15).ToList();
+
+        if (missingOrShortDesc.Count > 0 || duplicateDescs.Count > 0 || hashtagSpam.Count > 0)
+        {
+            var notes = new List<string>();
+            if (missingOrShortDesc.Count > 0) notes.Add($"{missingOrShortDesc.Count} blank/very short descriptions");
+            if (duplicateDescs.Count > 0) notes.Add($"{duplicateDescs.Count} identical copy-pasted boilerplate descriptions");
+            if (hashtagSpam.Count > 0) notes.Add($"{hashtagSpam.Count} over 15 hashtags (spam risk)");
+            score -= Math.Min(18, (missingOrShortDesc.Count > 0 ? 7 : 0) + (duplicateDescs.Count > 0 ? 8 : 0) + (hashtagSpam.Count > 0 ? 8 : 0));
+            items.Add(new PolicyChecklistItem
+            {
+                Id = "ypp-description-spam",
+                Verdict = "wrong",
+                Category = "Metadata & Description Quality",
+                Title = "Description issues: " + string.Join(", ", notes),
+                Detail = "YouTube checks descriptions on newest and most-viewed videos for original context and rejects copy-pasted boilerplate or hashtag/keyword stuffing.",
+                Steps =
+                [
+                    "Put 2 unique sentences describing what happens in that specific video above your standard funnel links.",
+                    "Keep 3–8 relevant hashtags per video (never >15) and avoid pasting comma-separated tag lists in descriptions."
+                ]
+            });
+        }
+        else
+        {
+            items.Add(new PolicyChecklistItem
+            {
+                Id = "ypp-descriptions-clean",
+                Verdict = "good",
+                Category = "Metadata & Description Quality",
+                Title = "Descriptions carry unique context with zero hashtag stuffing",
+                Detail = "Public snippets show natural wording rather than empty descriptions or repetitive copy-paste spam.",
+                Steps = ["Keep adding your funnel link + pinned discussion question cleanly under each video's unique intro."]
+            });
+        }
+
+        // 3. Reviewer Focus: Mobile Title Length & Funnel Value
+        var longTitles = videoAudits.Count(v => v.TitleLength > 58);
+        if (longTitles >= 3)
+        {
+            score -= 6;
+            items.Add(new PolicyChecklistItem
+            {
+                Id = "ypp-mobile-titles",
+                Verdict = "wrong",
+                Category = "Browse CTR & Packaging",
+                Title = $"{longTitles} of {videoAudits.Count} titles cut off on phones (>58 chars)",
+                Detail = "Higher click-through and clearer viewer expectations help YouTube recommend videos accurately without misleading clickbait.",
+                Steps =
+                [
+                    "Keep the payoff phrase under 55 characters using the Mobile Title Rewriter below.",
+                    "Check thumbnails on your top 5 and newest 5 uploads in Studio so they look legible on small screens."
+                ]
+            });
+        }
+        else if (stats.VideosWithLinks > 0)
+        {
+            items.Add(new PolicyChecklistItem
+            {
+                Id = "ypp-packaging-good",
+                Verdict = "good",
+                Category = "Packaging & Conversion",
+                Title = "Titles & external links support recommendation discovery",
+                Detail = $"{stats.VideosWithLinks}/{stats.VideosAnalyzed} recent uploads include viewer next-step links and concise packaging.",
+                Steps = ["Track top performing links in the Traffic Funnel builder and organize related episodes into playlists."]
+            });
+        }
+
+        // 4. Honest Unobservable Checks — Mobile / External Uploads & Visual/Audio Policies
+        items.Add(new PolicyChecklistItem
+        {
+            Id = "ypp-verify-mobile-visuals",
+            Verdict = "verify",
+            Category = "Mobile / Studio Check (Cannot Auto-Detect)",
+            Title = "Verify in-video originality on phone / external uploads",
+            Detail = $"Because {platform} feeds only expose public metadata (titles, views, description snippets) — especially if you upload from your mobile app or outside AnimStudio — automated tools cannot watch the video or hear your audio.",
+            Steps =
+            [
+                "Originality & Reused Content: Confirm your own voiceover, commentary, or original animation/filming drives every video (no unedited TV/movie/Reels clips or social watermarks).",
+                "Visual Variation (Inauthentic Content): Confirm recent AI/templated videos change scenes, pacing, and script angle rather than looping the same visuals.",
+                "Altered / Synthetic Content: In YouTube Studio → Video Details, enable 'Altered content' when realistic AI scenes or cloned/realistic synthetic voices could be mistaken for real footage.",
+                $"Audience, Copyright & YPP Status: Open studio.youtube.com → Earn & Content to confirm Made-for-Kids is set, 0 active strikes/claims, and review {YouTubeMonetizationPolicyUrl}."
+            ]
+        });
+
+        score = Math.Clamp(score, 20, 100);
+        var wrongCount = items.Count(i => i.Verdict == "wrong");
+        var overall = score >= 82 && wrongCount == 0 ? "Strong"
+            : score >= 62 && wrongCount <= 2 ? "NeedsAttention"
+            : "AtRisk";
+
+        var summary = wrongCount == 0
+            ? $"Public metadata across {recent.Count} uploads looks policy-compliant ({score}/100). Complete the manual mobile/Studio originality checks before YPP review."
+            : $"Found {wrongCount} policy/packaging risk(s) across {recent.Count} uploads ({score}/100). Follow the fix steps below and verify mobile uploads in YouTube Studio.";
+
+        return new MonetizationComplianceAudit
+        {
+            PolicyUrl = YouTubeMonetizationPolicyUrl,
+            OverallStatus = overall,
+            ScoreOutOf100 = score,
+            VideosEvaluated = recent.Count,
+            SummaryNote = summary,
+            Items = items
+        };
+    }
+
+    private static string NormalizeTitleTemplate(string? title)
+    {
+        if (string.IsNullOrWhiteSpace(title)) return string.Empty;
+        var clean = Regex.Replace(title, @"(?:#[^\s#]+|\[[^\]]{1,40}\])", " ");
+        clean = Regex.Replace(clean, @"[\d|:\-–—_/.,]+", " ");
+        return Regex.Replace(clean, @"\s+", " ").Trim().ToLowerInvariant();
     }
 
     private static List<AiPromptTemplate> BuildPromptTemplates(

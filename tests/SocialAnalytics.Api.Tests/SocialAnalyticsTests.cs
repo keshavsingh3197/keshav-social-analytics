@@ -692,6 +692,60 @@ public sealed class SocialAnalyticsTests : IDisposable
         Assert.Equal(9.0, report.TopOutlierVideo.ViewsPerSubscriber);
     }
 
+    [Fact]
+    public void BuildAuditResult_PopulatesMonetizationPolicyAuditForGoodAndRepetitiveChannels()
+    {
+        var goodChannel = new ChannelMetrics
+        {
+            ChannelName = "Original Katha",
+            ChannelHandle = "@originalkatha",
+            Platform = SocialPlatform.YouTube,
+            Niche = "Devotional",
+            FollowersOrSubscribers = 5000,
+            TotalViewsLast30Days = 40000,
+            EngagementRatePercentage = 4.8,
+            AverageViewDurationMinutes = 3.5,
+            RecentVideos =
+            [
+                new() { VideoId = "a1", Title = "Why Kartik Lamps Light Every River Ghat", DescriptionSnippet = "In-depth devotional narration on ancient Kartik Purnima customs and lamp offerings at https://panchang.keshavsingh.in", Views = 9000, PublishedAt = DateTime.UtcNow.AddDays(-2) },
+                new() { VideoId = "a2", Title = "How Prahlada Stood Firm in His Devotion", DescriptionSnippet = "Complete moral story with original voiceover and lessons for families at https://panchang.keshavsingh.in", Views = 11000, PublishedAt = DateTime.UtcNow.AddDays(-5) },
+                new() { VideoId = "a3", Title = "Gita Verse 2.47 Explained Step by Step", DescriptionSnippet = "Structured dialogue explaining karma yoga and clarity at https://panchang.keshavsingh.in", Views = 8500, PublishedAt = DateTime.UtcNow.AddDays(-8) }
+            ]
+        };
+
+        var goodResult = GrowthAdvisorService.BuildAuditResult(
+            goodChannel, goodChannel.ChannelHandle, SocialPlatform.YouTube, SocialSeedData.DefaultGrowthConfig(), SocialSeedData.DefaultSuggestions(), SocialSeedData.DefaultSiteConfig());
+
+        Assert.NotNull(goodResult.ComplianceAudit);
+        Assert.Equal("https://support.google.com/youtube/answer/1311392?hl=en", goodResult.ComplianceAudit!.PolicyUrl);
+        Assert.Equal("Strong", goodResult.ComplianceAudit.OverallStatus);
+        Assert.Contains(goodResult.ComplianceAudit.Items, i => i.Verdict == "good" && i.Id == "ypp-titles-original");
+        Assert.Contains(goodResult.ComplianceAudit.Items, i => i.Verdict == "verify" && i.Detail.Contains("mobile", StringComparison.OrdinalIgnoreCase));
+
+        var riskyChannel = new ChannelMetrics
+        {
+            ChannelName = "Template Clips",
+            ChannelHandle = "@templateclips",
+            Platform = SocialPlatform.YouTube,
+            Niche = "General",
+            RecentVideos =
+            [
+                new() { VideoId = "r1", Title = "Daily Status Part 1", DescriptionSnippet = "", Views = 300, PublishedAt = DateTime.UtcNow.AddDays(-1) },
+                new() { VideoId = "r2", Title = "Daily Status Part 2", DescriptionSnippet = "", Views = 250, PublishedAt = DateTime.UtcNow.AddDays(-2) },
+                new() { VideoId = "r3", Title = "New WhatsApp Status Video #3", DescriptionSnippet = "sub", Views = 200, PublishedAt = DateTime.UtcNow.AddDays(-3) }
+            ]
+        };
+
+        var riskyResult = GrowthAdvisorService.BuildAuditResult(
+            riskyChannel, riskyChannel.ChannelHandle, SocialPlatform.YouTube, SocialSeedData.DefaultGrowthConfig(), SocialSeedData.DefaultSuggestions(), SocialSeedData.DefaultSiteConfig());
+
+        Assert.NotNull(riskyResult.ComplianceAudit);
+        Assert.Equal("AtRisk", riskyResult.ComplianceAudit!.OverallStatus);
+        Assert.Contains(riskyResult.ComplianceAudit.Items, i => i.Verdict == "wrong" && i.Id == "ypp-inauthentic-titles");
+        Assert.Contains(riskyResult.ComplianceAudit.Items, i => i.Verdict == "wrong" && i.Id == "ypp-reused-clues");
+        Assert.Contains(riskyResult.DetectedIssues, i => i.Category.StartsWith("YPP Policy:", StringComparison.Ordinal));
+    }
+
     private static ClaimsPrincipal MakePrincipal(string userId, string role) =>
         new(new ClaimsIdentity(
         [
