@@ -62,6 +62,8 @@ const BUILTIN_EN: Record<string, string> = {
   'social.advisor.title': '🚀 Growth Advisor & Channel Fix Studio',
   'social.funnel.title': '🎯 Traffic Funnel & Link Conversion Engine',
   'social.kpi.viewsPerSub': 'Views / Subscriber (Outlier Score)',
+  'social.seedWarning.title': '🚫 Never Buy Paid Subscribers or Sub4Sub — Protect Your Seed Audience',
+  'social.seedWarning.body': 'YouTube tests every new upload with a small seed audience matched by subscriber & viewer watch history. If paid or inactive subscribers skip early, your CTR and watch retention lose against competing videos — stopping organic recommendations and risking YPP Fake Engagement penalties. Focus strictly on real viewers interested in your topic.',
   'ecosystem.language.label': 'Language',
 };
 
@@ -79,6 +81,8 @@ const BUILTIN_HI: Record<string, string> = {
   'social.advisor.title': '🚀 ग्रोथ एडवाइज़र एवं चैनल फ़िक्स स्टूडियो',
   'social.funnel.title': '🎯 ट्रैफिक फ़नल और लिंक कन्वर्ज़न इंजन',
   'social.kpi.viewsPerSub': 'व्यूज़ / सब्सक्राइबर (आउटलायर स्कोर)',
+  'social.seedWarning.title': '🚫 कभी भी Paid Subscribers या Sub4Sub न लें — अपनी Seed Audience बचाएं',
+  'social.seedWarning.body': 'हर नए वीडियो को YouTube सबसे पहले आपके सब्सक्राइबर्स और दर्शकों की Watch History वाली Seed Audience को दिखाकर अन्य वीडियो से तुलना (Compare) करता है। यदि Paid या नकली सब्सक्राइबर्स वीडियो को Skip कर देते हैं, तो शुरुआती CTR व Watch Time गिर जाता है और YouTube आपके वीडियो को नए दर्शकों तक आगे नहीं बढ़ाता। हमेशा केवल वास्तविक (Organic) दर्शक ही जोड़ें।',
   'ecosystem.language.label': 'भाषा',
 };
 

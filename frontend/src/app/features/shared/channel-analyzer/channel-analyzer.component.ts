@@ -6,11 +6,12 @@ import { Subject, Subscription, debounceTime, distinctUntilChanged, of, switchMa
 import { ChannelMetrics, ChannelSearchCandidate, SocialPlatform } from '../../../core/models/analytics.models';
 import { AnalyticsService } from '../../../core/services/analytics.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { MonetizationPolicyAuditComponent } from '../monetization-policy-audit/monetization-policy-audit.component';
 
 @Component({
   selector: 'app-channel-analyzer',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, MonetizationPolicyAuditComponent],
   template: `
     <section class="analyzer-card">
       <div class="section-header">
@@ -153,6 +154,12 @@ import { AuthService } from '../../../core/services/auth.service';
                 }
               </ul>
             </div>
+          }
+
+          @if (res.audit.complianceAudit; as compliance) {
+            <app-monetization-policy-audit
+              [audit]="compliance"
+              [fullAdvisorHandle]="res.channel.channelHandle || res.channel.channelName" />
           }
 
           @if (res.channel.recentVideos && res.channel.recentVideos.length > 0) {

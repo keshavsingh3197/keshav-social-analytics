@@ -43,10 +43,12 @@ public sealed class CentralLocalizationTests : IDisposable
         var enBundle = await service.GetBundleAsync(null);
         Assert.Equal("en", enBundle.Locale);
         Assert.Equal("Social Channel Performance & Growth Hub", enBundle.Entries["social.hero.title"]);
+        Assert.Contains("Seed Audience", enBundle.Entries["social.seedWarning.title"], StringComparison.OrdinalIgnoreCase);
 
         var hiBundle = await service.GetBundleAsync("hi");
         Assert.Equal("hi", hiBundle.Locale);
         Assert.Equal("सोशल चैनल प्रदर्शन और ग्रोथ हब", hiBundle.Entries["social.hero.title"]);
+        Assert.Contains("Paid Subscribers", hiBundle.Entries["social.seedWarning.title"], StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

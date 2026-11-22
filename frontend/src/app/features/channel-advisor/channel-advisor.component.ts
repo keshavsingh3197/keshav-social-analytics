@@ -8,6 +8,7 @@ import { EcosystemConfigService } from '../../core/services/ecosystem-config.ser
 import { LocaleService } from '../../core/services/locale.service';
 import { AdSlotComponent } from '../shared/ad-slot/ad-slot.component';
 import { LoadingStateComponent } from '../shared/loading/loading-state.component';
+import { MonetizationPolicyAuditComponent } from '../shared/monetization-policy-audit/monetization-policy-audit.component';
 import {
   AiPromptTemplate,
   ChannelAuditResult,
@@ -20,7 +21,7 @@ import {
 @Component({
   selector: 'app-channel-advisor',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, AdSlotComponent, LoadingStateComponent],
+  imports: [CommonModule, FormsModule, RouterModule, AdSlotComponent, LoadingStateComponent, MonetizationPolicyAuditComponent],
   template: `
     <div class="advisor-page">
       <div class="header-box">
@@ -201,6 +202,10 @@ import {
               }
             </div>
           </div>
+        }
+
+        @if (audit.complianceAudit) {
+          <app-monetization-policy-audit [audit]="audit.complianceAudit" />
         }
 
         <!-- Quick-Fix Metadata, Mobile Title Preview & Funnel CTA Studio -->

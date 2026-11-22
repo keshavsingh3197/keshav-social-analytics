@@ -96,6 +96,26 @@ public class ChannelAuditSnapshot
     public double EstimatedMonthlyRevenue { get; set; }
 }
 
+public class PolicyChecklistItem
+{
+    public string Id { get; set; } = string.Empty;
+    public string Verdict { get; set; } = "verify"; // "good", "wrong", "verify"
+    public string Category { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Detail { get; set; } = string.Empty;
+    public List<string> Steps { get; set; } = new();
+}
+
+public class MonetizationComplianceAudit
+{
+    public string PolicyUrl { get; set; } = "https://support.google.com/youtube/answer/1311392?hl=en";
+    public string OverallStatus { get; set; } = "NeedsAttention"; // "Strong", "NeedsAttention", "AtRisk"
+    public int ScoreOutOf100 { get; set; }
+    public int VideosEvaluated { get; set; }
+    public string SummaryNote { get; set; } = string.Empty;
+    public List<PolicyChecklistItem> Items { get; set; } = new();
+}
+
 public class ChannelAuditResult
 {
     public string ChannelHandle { get; set; } = string.Empty;
@@ -109,6 +129,7 @@ public class ChannelAuditResult
     public List<AiPromptTemplate> PromptTemplates { get; set; } = new();
     public string RecommendedDescriptionTemplate { get; set; } = string.Empty;
     public string RecommendedPinnedComment { get; set; } = string.Empty;
+    public MonetizationComplianceAudit? ComplianceAudit { get; set; }
     public List<GrowthSuggestion> PrioritySuggestions { get; set; } = new();
     public List<string> BestUploadTimes { get; set; } = new();
     public List<string> HighDemandKeywords { get; set; } = new();
