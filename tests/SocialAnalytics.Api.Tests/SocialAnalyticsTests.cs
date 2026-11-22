@@ -720,7 +720,28 @@ public sealed class SocialAnalyticsTests : IDisposable
         Assert.Equal("https://support.google.com/youtube/answer/1311392?hl=en", goodResult.ComplianceAudit!.PolicyUrl);
         Assert.Equal("Strong", goodResult.ComplianceAudit.OverallStatus);
         Assert.Contains(goodResult.ComplianceAudit.Items, i => i.Verdict == "good" && i.Id == "ypp-titles-original");
+        Assert.Contains(goodResult.ComplianceAudit.Items, i => i.Verdict == "good" && i.Id == "ypp-organic-seed-audience");
         Assert.Contains(goodResult.ComplianceAudit.Items, i => i.Verdict == "verify" && i.Detail.Contains("mobile", StringComparison.OrdinalIgnoreCase));
+
+        var paidSubRiskChannel = new ChannelMetrics
+        {
+            ChannelName = "Inactive Bought Subs",
+            ChannelHandle = "@inactivebought",
+            Platform = SocialPlatform.YouTube,
+            Niche = "Tech",
+            FollowersOrSubscribers = 10000,
+            TotalViewsLast30Days = 180,
+            RecentVideos =
+            [
+                new() { VideoId = "p1", Title = "Laptop Review 2026 Deep Look", DescriptionSnippet = "Original detailed walkthrough of hardware specs and thermals at https://keshavsingh.in", Views = 45, PublishedAt = DateTime.UtcNow.AddDays(-2) },
+                new() { VideoId = "p2", Title = "Top 5 Coding Tips For Students", DescriptionSnippet = "Full developer workflow setup and terminal shortcuts at https://keshavsingh.in", Views = 52, PublishedAt = DateTime.UtcNow.AddDays(-5) },
+                new() { VideoId = "p3", Title = "Database Indexing Explained Simply", DescriptionSnippet = "Step-by-step SQL query optimization guide at https://keshavsingh.in", Views = 40, PublishedAt = DateTime.UtcNow.AddDays(-9) }
+            ]
+        };
+
+        var paidSubAudit = GrowthAdvisorService.BuildAuditResult(
+            paidSubRiskChannel, paidSubRiskChannel.ChannelHandle, SocialPlatform.YouTube, SocialSeedData.DefaultGrowthConfig(), SocialSeedData.DefaultSuggestions(), SocialSeedData.DefaultSiteConfig());
+        Assert.Contains(paidSubAudit.ComplianceAudit!.Items, i => i.Verdict == "wrong" && i.Id == "ypp-organic-seed-audience" && i.Detail.Contains("seed audience", StringComparison.OrdinalIgnoreCase));
 
         var riskyChannel = new ChannelMetrics
         {

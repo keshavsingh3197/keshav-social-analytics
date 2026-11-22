@@ -735,6 +735,45 @@ public class GrowthAdvisorService
             ]
         });
 
+        // 5. Seed Audience & Fake/Paid Subscriber Protection (Algorithm & YPP Fake Engagement Policy)
+        var subs = ch?.FollowersOrSubscribers ?? 0;
+        var lowSubWake = subs >= 500 && stats.AvgViewsPerVideo > 0
+            && (stats.AvgViewsPerVideo < subs * 0.03 || (ch is not null && ch.TotalViewsLast30Days < subs * 0.08));
+        if (lowSubWake)
+        {
+            score -= 10;
+            items.Add(new PolicyChecklistItem
+            {
+                Id = "ypp-organic-seed-audience",
+                Verdict = "wrong",
+                Category = "Seed Audience & Fake Engagement",
+                Title = "Low active subscriber watch rate — never buy paid subscribers or sub4sub",
+                Detail = $"Recent videos average {stats.AvgViewsPerVideo:N0} views vs {subs:N0} subscribers. {platform} distributes each new upload to a seed audience based on subscriber & viewer watch history and compares retention/CTR against competing videos. Paid, inactive, or disinterested subscribers skip immediately — causing the algorithm to stop recommending the video.",
+                Steps =
+                [
+                    "Never buy subscribers, paid views, or sub4sub — disinterested accounts hurt early seed-audience retention and risk YPP Fake Engagement penalties.",
+                    "Double down strictly on one cohesive organic topic so subscribers who click actually watch past the first 30 seconds.",
+                    "Uncheck 'Publish to subscriptions feed and notify subscribers' only for experimental off-niche tests while rebuilding core organic watch history."
+                ]
+            });
+        }
+        else
+        {
+            items.Add(new PolicyChecklistItem
+            {
+                Id = "ypp-organic-seed-audience",
+                Verdict = "good",
+                Category = "Seed Audience & Organic Growth",
+                Title = "Avoid paid subscribers & sub4sub — grow strictly with organic viewers",
+                Detail = "YouTube tests every new video with an initial seed audience built from subscribers' and viewers' watch history, then compares CTR and retention against other videos. Paid or mismatched subscribers skip immediately, stopping broader organic reach.",
+                Steps =
+                [
+                    "Never purchase subscribers, view bots, or sub4sub exchanges — keep 100% real viewers who genuinely watch your topic.",
+                    "Use clean titles, authentic hooks, and niche-focused topics so every seed impression converts into strong watch time."
+                ]
+            });
+        }
+
         score = Math.Clamp(score, 20, 100);
         var wrongCount = items.Count(i => i.Verdict == "wrong");
         var overall = score >= 82 && wrongCount == 0 ? "Strong"

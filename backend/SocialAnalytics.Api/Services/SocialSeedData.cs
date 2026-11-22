@@ -70,6 +70,17 @@ public static class SocialSeedData
             ActionItem = "Place a tracked /t/<slug> funnel link in line 1 of the video description and pinned comment.",
             EstimatedGain = "+3-8% Outbound Session Conversion",
             ApplicablePlatform = SocialPlatform.Facebook
+        },
+        new()
+        {
+            Id = "gs-5",
+            Category = "Algorithm & Seed Audience",
+            Title = "100% Organic Growth — Never Buy Paid Subscribers or Sub4Sub",
+            Description = "YouTube recommends each upload first to a seed audience from subscribers' watch history and compares early CTR & retention against competing videos. Paid/inactive subscribers skip fast, stopping wider recommendations and risking YPP Fake Engagement violations.",
+            Impact = SuggestionImpact.High,
+            ActionItem = "Build strictly from real topic-matched organic viewers via strong hooks and consistent niche videos — never purchase subs or views.",
+            EstimatedGain = "Protects Long-Term Algorithmic Reach",
+            ApplicablePlatform = SocialPlatform.YouTube
         }
     ];
 

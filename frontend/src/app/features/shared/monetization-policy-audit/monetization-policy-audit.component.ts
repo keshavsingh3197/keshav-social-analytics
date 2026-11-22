@@ -1,7 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, input, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { RouterModule } from '@angular/router';
 import { MonetizationComplianceAudit, PolicyChecklistItem } from '../../../core/models/analytics.models';
+import { LocaleService } from '../../../core/services/locale.service';
 
 type VerdictFilter = 'all' | 'wrong' | 'good' | 'verify';
 
@@ -36,6 +37,11 @@ const POLICY_URL = 'https://support.google.com/youtube/answer/1311392?hl=en';
               </a>
             }
           </div>
+        </div>
+
+        <div class="seed-warning-box" role="note">
+          <strong>{{ locale.t('social.seedWarning.title') }}</strong>
+          <p>{{ locale.t('social.seedWarning.body') }}</p>
         </div>
 
         <div class="policy-tabs" role="tablist" aria-label="Filter policy checks">
@@ -119,6 +125,18 @@ const POLICY_URL = 'https://support.google.com/youtube/answer/1311392?hl=en';
     .policy-item[data-verdict="good"] { border-left-color: #10b981; }
     .policy-item[data-verdict="wrong"] { border-left-color: #ef4444; background: #fffafa; }
     .policy-item[data-verdict="verify"] { border-left-color: #0284c7; background: #f8fbff; }
+    .seed-warning-box {
+      border-radius: 10px;
+      padding: 0.85rem 1rem;
+      background: #fff7ed;
+      border: 1px solid #fdba74;
+      border-left: 4px solid #ea580c;
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+    .seed-warning-box strong { font-size: 0.88rem; color: #9a3412; }
+    .seed-warning-box p { margin: 0; font-size: 0.81rem; color: #7c2d12; line-height: 1.48; }
     .policy-item-top { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
     .verdict-pill { font-size: 0.7rem; font-weight: 800; padding: 0.16rem 0.5rem; border-radius: 999px; }
     .verdict-pill[data-verdict="good"] { background: #dcfce7; color: #166534; }
@@ -132,6 +150,7 @@ const POLICY_URL = 'https://support.google.com/youtube/answer/1311392?hl=en';
   `],
 })
 export class MonetizationPolicyAuditComponent {
+  readonly locale = inject(LocaleService);
   readonly audit = input<MonetizationComplianceAudit | null | undefined>(null);
   readonly fullAdvisorHandle = input<string | null | undefined>(null);
 
